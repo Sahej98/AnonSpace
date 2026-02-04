@@ -1,0 +1,22 @@
+{
+  "name": "whisper",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "server": "cd server && nodemon server.js",
+    "client": "cd client && npm run dev",
+    "seed": "cd server && node seed.js",
+    "build-client": "cd client && npm i",
+    "build-server": "cd server && npm i",
+    "build": "concurrently \"npm run build-client\" \"npm run build-server\"",
+    "start": "concurrently \"npm run client\" \"npm run server\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
