@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Bell, Ghost, X, Heart, TrendingUp, Eye } from 'lucide-react';
+import { Bell, X, Heart, TrendingUp, Eye } from 'lucide-react';
 import { useOnClickOutside } from '../hooks/useOnClickOutside.js';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -38,9 +38,7 @@ const Header = () => {
   return (
     <header className='app-header'>
       <div className='logo-container'>
-        <div className='logo-icon'>
-          <Ghost size={20} />
-        </div>
+        <img src='/logo.png' alt='AnonSpace Logo' className='logo-image' />
         <span className='logo-text'>AnonSpace</span>
       </div>
 

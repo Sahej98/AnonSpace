@@ -24,13 +24,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: "http://localhost:5174",
         methods: ["GET", "POST"]
     }
 });
 
 const filter = new Filter();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const ADMIN_ID = '111111111111111111111111'; // Hardcoded Admin ID
 
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));

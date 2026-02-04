@@ -297,16 +297,13 @@ input, textarea {
   gap: 0.6rem;
 }
 
-.logo-icon {
-  width: 1.8rem;
-  height: 1.8rem;
-  background: var(--primary-gradient);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  box-shadow: 0 0 15px var(--primary-glow);
+.logo-image {
+  height: 2rem;
+  width: auto;
+  max-width: 120px;
+  object-fit: contain;
+  /* Optional: filter to ensure it looks good in dark mode if needed */
+  /* filter: drop-shadow(0 0 4px var(--primary-glow)); */
 }
 
 .logo-text {
