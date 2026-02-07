@@ -7,11 +7,12 @@ const AliasSchema = new Schema({
     color: { type: String, required: true },
 }, { _id: false });
 
+// Recursive Comment Schema Support
 const CommentSchema = new Schema({
     content: {
         type: String,
         required: true,
-        maxLength: 280,
+        maxLength: 500,
     },
     userId: {
         type: Schema.Types.ObjectId,
@@ -21,17 +22,35 @@ const CommentSchema = new Schema({
     alias: {
         type: AliasSchema,
         required: true,
-    }
+    },
+    // Simple threading: Replies are embedded
+    replies: [new Schema({
+        content: { type: String, required: true },
+        userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        alias: { type: AliasSchema, required: true },
+        createdAt: { type: Date, default: Date.now }
+    })]
 }, {
     timestamps: true,
+});
+
+const PollOptionSchema = new Schema({
+    text: { type: String, required: true },
+    votes: [{ type: Schema.Types.ObjectId, ref: 'User' }]
 });
 
 const PostSchema = new Schema({
     content: {
         type: String,
         required: true,
-        maxLength: 280,
+        maxLength: 500,
     },
+    type: {
+        type: String,
+        enum: ['text', 'poll'],
+        default: 'text'
+    },
+    pollOptions: [PollOptionSchema],
     tags: {
         type: [String],
         default: [],
@@ -53,8 +72,16 @@ const PostSchema = new Schema({
         type: Number,
         default: 0
     },
+    likedBy: [{
+        type: Schema.Types.ObjectId,
+        ref: 'User'
+    }],
+    dislikedBy: [{
+        type: Schema.Types.ObjectId,
+        ref: 'User'
+    }],
     comments: [CommentSchema],
-    reports: { // This can be deprecated in favor of the Reports collection count
+    reports: {
         type: Number,
         default: 0,
     },

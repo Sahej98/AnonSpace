@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiFetch } from '../api.js';
+import { apiFetch } from '../api';
 import {
   ShieldAlert,
   Users,
@@ -8,6 +8,8 @@ import {
   CheckCircle,
   Trash2,
   RotateCcw,
+  ArrowLeft,
+  MessageSquare,
 } from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
 
@@ -20,13 +22,19 @@ const AdminDashboard = () => {
     postCount: 0,
     reportCount: 0,
   });
+
+  // User Detail View State
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userHistory, setUserHistory] = useState({ posts: [], comments: [] });
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   const addToast = useToast();
 
   useEffect(() => {
     fetchStats();
-    if (activeTab === 'users') fetchUsers();
+    if (activeTab === 'users' && !selectedUser) fetchUsers();
     if (activeTab === 'reports') fetchReports();
-  }, [activeTab]);
+  }, [activeTab, selectedUser]);
 
   const fetchStats = async () => {
     try {
@@ -49,6 +57,23 @@ const AdminDashboard = () => {
     } catch (e) {}
   };
 
+  const fetchUserHistory = async (userId) => {
+    setLoadingHistory(true);
+    try {
+      const res = await apiFetch(`/api/admin/users/${userId}/history`);
+      if (res.ok) setUserHistory(await res.json());
+    } catch (e) {
+      addToast('Failed to fetch history', 'error');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleUserSelect = (user) => {
+    setSelectedUser(user);
+    fetchUserHistory(user._id);
+  };
+
   const handleUserAction = async (userId, action) => {
     try {
       const res = await apiFetch(`/api/admin/users/${userId}/action`, {
@@ -57,7 +82,14 @@ const AdminDashboard = () => {
       });
       if (res.ok) {
         addToast(`Action ${action} successful`, 'success');
-        fetchUsers();
+        // Update local state if needed
+        if (selectedUser && selectedUser._id === userId) {
+          // simplistic toggle for UI update
+          const updated = await res.json();
+          setSelectedUser(updated);
+        } else {
+          fetchUsers();
+        }
       }
     } catch (e) {
       addToast('Action failed', 'error');
@@ -78,12 +110,23 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleDeleteContent = async (type, id, reportId) => {
+  const handleDeleteContent = async (type, id, reportId = null) => {
+    // Currently only post deletion is fully supported via API for admin,
+    // ensuring 'type' is handled correctly.
     if (type === 'post') {
       try {
         await apiFetch(`/api/posts/${id}`, { method: 'DELETE' });
-        await handleResolveReport(reportId);
-        addToast('Content deleted & report resolved', 'success');
+        if (reportId) await handleResolveReport(reportId);
+
+        // Update local history if viewing specific user
+        if (selectedUser) {
+          setUserHistory((prev) => ({
+            ...prev,
+            posts: prev.posts.filter((p) => p._id !== id),
+          }));
+        }
+
+        addToast('Content deleted', 'success');
       } catch (e) {
         addToast('Failed to delete content', 'error');
       }
@@ -91,6 +134,177 @@ const AdminDashboard = () => {
       addToast('Deletion only supported for posts currently', 'info');
     }
   };
+
+  if (selectedUser) {
+    return (
+      <div className='centered-page-container full-width'>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            marginBottom: '1.5rem',
+            width: '100%',
+          }}>
+          <button onClick={() => setSelectedUser(null)} className='icon-button'>
+            <ArrowLeft size={24} />
+          </button>
+          <h1 className='feed-header-title' style={{ margin: 0 }}>
+            User Details
+          </h1>
+        </div>
+
+        <div className='card' style={{ marginBottom: '2rem', width: '100%' }}>
+          <div className='card-header'>
+            <div className='card-title'>
+              <span style={{ fontFamily: 'monospace', fontSize: '1rem' }}>
+                {selectedUser._id}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+            {selectedUser.isBanned && (
+              <span style={{ color: 'var(--accent-red)', fontWeight: 'bold' }}>
+                BANNED
+              </span>
+            )}
+            {selectedUser.isTimedOut && (
+              <span style={{ color: 'orange', fontWeight: 'bold' }}>
+                TIMED OUT
+              </span>
+            )}
+            <span style={{ color: 'var(--text-dim)' }}>
+              Joined: {new Date(selectedUser.createdAt).toLocaleDateString()}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            {selectedUser.isBanned ? (
+              <button
+                className='action-button'
+                onClick={() => handleUserAction(selectedUser._id, 'unban')}
+                style={{ color: 'var(--accent-green)' }}>
+                <RotateCcw size={16} /> Unban
+              </button>
+            ) : (
+              <button
+                className='action-button danger'
+                onClick={() => handleUserAction(selectedUser._id, 'ban')}>
+                <Ban size={16} /> Ban User
+              </button>
+            )}
+            {selectedUser.isTimedOut ? (
+              <button
+                className='action-button'
+                onClick={() =>
+                  handleUserAction(selectedUser._id, 'remove_timeout')
+                }
+                style={{ color: 'var(--accent-green)' }}>
+                <Clock size={16} /> Remove Timeout
+              </button>
+            ) : (
+              <button
+                className='action-button'
+                onClick={() => handleUserAction(selectedUser._id, 'timeout')}
+                style={{ color: 'orange' }}>
+                <Clock size={16} /> Timeout 24h
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ width: '100%' }}>
+          <h2
+            className='feed-header-subtitle'
+            style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
+            User History
+          </h2>
+          {loadingHistory ? (
+            <p className='muted-text'>Loading history...</p>
+          ) : (
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <div>
+                <h3
+                  style={{
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    marginBottom: '0.5rem',
+                    color: 'var(--primary)',
+                  }}>
+                  Recent Posts ({userHistory.posts.length})
+                </h3>
+                {userHistory.posts.length === 0 && (
+                  <p className='muted-text'>No posts found.</p>
+                )}
+                {userHistory.posts.map((post) => (
+                  <div
+                    key={post._id}
+                    className='card'
+                    style={{ padding: '1rem', marginBottom: '0.5rem' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                      }}>
+                      <span
+                        style={{
+                          fontSize: '0.8rem',
+                          color: 'var(--text-dim)',
+                        }}>
+                        {new Date(post.createdAt).toLocaleDateString()}
+                      </span>
+                      <button
+                        className='icon-button'
+                        onClick={() => handleDeleteContent('post', post._id)}
+                        style={{ color: 'var(--accent-red)' }}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                    <p style={{ marginTop: '0.5rem' }}>{post.content}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <h3
+                  style={{
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    marginBottom: '0.5rem',
+                    color: 'var(--accent-green)',
+                  }}>
+                  Recent Comments ({userHistory.comments.length})
+                </h3>
+                {userHistory.comments.length === 0 && (
+                  <p className='muted-text'>No comments found.</p>
+                )}
+                {userHistory.comments.map((comment) => (
+                  <div
+                    key={comment._id}
+                    className='card'
+                    style={{
+                      padding: '1rem',
+                      marginBottom: '0.5rem',
+                      borderLeft: '3px solid var(--accent-green)',
+                    }}>
+                    <div
+                      style={{
+                        fontSize: '0.8rem',
+                        color: 'var(--text-dim)',
+                        marginBottom: '0.25rem',
+                      }}>
+                      On Post: {comment.postContent?.substring(0, 30)}...
+                    </div>
+                    <p>{comment.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className='centered-page-container full-width'>
@@ -171,7 +385,9 @@ const AdminDashboard = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '1rem',
-              }}>
+                cursor: 'pointer',
+              }}
+              onClick={() => handleUserSelect(u)}>
               <div>
                 <code style={{ fontSize: '0.9rem', color: 'var(--primary)' }}>
                   {u._id}
@@ -196,37 +412,14 @@ const AdminDashboard = () => {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {u.isBanned ? (
-                  <button
-                    className='icon-button'
-                    onClick={() => handleUserAction(u._id, 'unban')}
-                    title='Unban'>
-                    <RotateCcw size={18} color='var(--accent-green)' />
-                  </button>
-                ) : (
-                  <button
-                    className='icon-button'
-                    onClick={() => handleUserAction(u._id, 'ban')}
-                    title='Ban'>
-                    <Ban size={18} color='var(--accent-red)' />
-                  </button>
-                )}
-
-                {u.isTimedOut ? (
-                  <button
-                    className='icon-button'
-                    onClick={() => handleUserAction(u._id, 'remove_timeout')}
-                    title='Remove Timeout'>
-                    <Clock size={18} color='var(--accent-green)' />
-                  </button>
-                ) : (
-                  <button
-                    className='icon-button'
-                    onClick={() => handleUserAction(u._id, 'timeout')}
-                    title='Timeout 24h'>
-                    <Clock size={18} color='orange' />
-                  </button>
-                )}
+                <button
+                  className='icon-button'
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleUserSelect(u);
+                  }}>
+                  <MessageSquare size={18} />
+                </button>
               </div>
             </div>
           ))}

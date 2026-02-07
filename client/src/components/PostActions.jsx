@@ -1,76 +1,62 @@
-import React, { useOptimistic } from 'react';
-import { ThumbsUp, MessageSquare, Flag } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ThumbsUp, ThumbsDown, MessageSquare } from 'lucide-react';
 import { apiFetch } from '../api.js';
 import { useToast } from '../hooks/useToast.js';
 
 const PostActions = ({ post, onCommentClick }) => {
   const addToast = useToast();
 
-  const [optimisticLikes, setOptimisticLikes] = useOptimistic(
-    post.likes,
-    (state) => state + 1,
-  );
+  const [likes, setLikes] = useState(post.likes);
+  const [dislikes, setDislikes] = useState(post.dislikes || 0);
+  const [hasLiked, setHasLiked] = useState(post.hasLiked || false);
+  const [hasDisliked, setHasDisliked] = useState(post.hasDisliked || false);
 
-  const triggerConfetti = (e) => {
-    // Simple particle burst using CSS/DOM
-    const rect = e.target.getBoundingClientRect();
-    for (let i = 0; i < 10; i++) {
-      const particle = document.createElement('div');
-      particle.style.position = 'fixed';
-      particle.style.left = rect.left + rect.width / 2 + 'px';
-      particle.style.top = rect.top + rect.height / 2 + 'px';
-      particle.style.width = '6px';
-      particle.style.height = '6px';
-      particle.style.background = ['#6366f1', '#10b981', '#ef4444', '#f59e0b'][
-        Math.floor(Math.random() * 4)
-      ];
-      particle.style.borderRadius = '50%';
-      particle.style.pointerEvents = 'none';
-      particle.style.zIndex = '9999';
-      document.body.appendChild(particle);
+  useEffect(() => {
+    setLikes(post.likes);
+    setDislikes(post.dislikes || 0);
+    setHasLiked(post.hasLiked || false);
+    setHasDisliked(post.hasDisliked || false);
+  }, [post]);
 
-      const angle = Math.random() * Math.PI * 2;
-      const velocity = 2 + Math.random() * 4;
-      const tx = Math.cos(angle) * 50 * Math.random();
-      const ty = Math.sin(angle) * 50 * Math.random() - 20;
+  const handleReaction = async (type) => {
+    const isLike = type === 'like';
 
-      particle.animate(
-        [
-          { transform: 'translate(0,0) scale(1)', opacity: 1 },
-          { transform: `translate(${tx}px, ${ty}px) scale(0)`, opacity: 0 },
-        ],
-        {
-          duration: 600 + Math.random() * 200,
-          easing: 'cubic-bezier(0, .9, .57, 1)',
-        },
-      ).onfinish = () => particle.remove();
-    }
-  };
-
-  const handleLike = (e) => {
-    setOptimisticLikes(post.likes + 1);
-    triggerConfetti(e);
-    apiFetch(`/api/posts/${post._id}/reaction`, {
-      method: 'POST',
-      body: JSON.stringify({ reactionType: 'like' }),
-    });
-  };
-
-  const handleReport = async () => {
-    const payload = {
-      targetType: 'post',
-      targetId: post._id,
-      reason: 'User reported content.',
-    };
-    const response = await apiFetch('/api/report', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    if (response.ok) {
-      addToast('Content has been reported.', 'success');
+    // Optimistic Update
+    if (isLike) {
+      if (hasLiked) {
+        setHasLiked(false);
+        setLikes((prev) => prev - 1);
+      } else {
+        setHasLiked(true);
+        setLikes((prev) => prev + 1);
+        if (hasDisliked) {
+          setHasDisliked(false);
+          setDislikes((prev) => prev - 1);
+        }
+      }
     } else {
-      const data = await response.json();
-      addToast(data.error || 'Failed to report content.', 'error');
+      if (hasDisliked) {
+        setHasDisliked(false);
+        setDislikes((prev) => prev - 1);
+      } else {
+        setHasDisliked(true);
+        setDislikes((prev) => prev + 1);
+        if (hasLiked) {
+          setHasLiked(false);
+          setLikes((prev) => prev - 1);
+        }
+      }
+    }
+
+    try {
+      const response = await apiFetch(`/api/posts/${post._id}/reaction`, {
+        method: 'POST',
+        body: JSON.stringify({ reactionType: type }),
+      });
+      if (!response.ok) throw new Error();
+    } catch (error) {
+      // Revert if failed (simplified revert, ideally reload post)
+      addToast('Action failed', 'error');
     }
   };
 
@@ -78,24 +64,23 @@ const PostActions = ({ post, onCommentClick }) => {
     <div className='actions-container'>
       <button
         className='action-button like-button'
-        onClick={handleLike}
-        aria-label='Like'>
-        <ThumbsUp size={16} />
-        <span>{optimisticLikes}</span>
+        onClick={() => handleReaction('like')}
+        style={{ color: hasLiked ? 'var(--primary)' : 'inherit' }}>
+        <ThumbsUp size={16} fill={hasLiked ? 'currentColor' : 'none'} />
+        <span>{likes}</span>
       </button>
+
       <button
-        className='action-button comment-button'
-        onClick={onCommentClick}
-        aria-label='Comment'>
+        className='action-button dislike-button'
+        onClick={() => handleReaction('dislike')}
+        style={{ color: hasDisliked ? 'var(--accent-red)' : 'inherit' }}>
+        <ThumbsDown size={16} fill={hasDisliked ? 'currentColor' : 'none'} />
+        <span>{dislikes}</span>
+      </button>
+
+      <button className='action-button comment-button' onClick={onCommentClick}>
         <MessageSquare size={16} />
         <span>{post.comments?.length || 0}</span>
-      </button>
-      <button
-        className='action-button report-button'
-        onClick={handleReport}
-        aria-label='Report'>
-        <Flag size={16} />
-        <span>Report</span>
       </button>
     </div>
   );

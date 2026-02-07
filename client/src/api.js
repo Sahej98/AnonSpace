@@ -1,4 +1,6 @@
 
+const BASE_URL = import.meta.env.VITE_API_URL || '';
+
 export const apiFetch = (url, options = {}) => {
     const userId = localStorage.getItem('anonspaceUserId');
 
@@ -11,5 +13,5 @@ export const apiFetch = (url, options = {}) => {
         headers['X-User-ID'] = userId;
     }
 
-    return fetch(url, { ...options, headers });
+    return fetch(`${BASE_URL}${url}`, { ...options, headers });
 };

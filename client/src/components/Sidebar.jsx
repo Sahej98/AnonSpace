@@ -3,12 +3,10 @@ import { NavLink } from 'react-router-dom';
 import {
   Compass,
   MessageCircle,
-  TrendingUp,
-  Info,
   Settings,
   Archive,
   ShieldAlert,
-  BookOpen,
+  Home,
 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext.jsx';
 
@@ -18,13 +16,14 @@ const Sidebar = () => {
   const getNavLinkClass = ({ isActive }) => {
     return isActive ? 'nav-item active' : 'nav-item';
   };
+  const isDesktop = window.innerWidth >= 768;
 
   return (
     <aside className='sidebar'>
-      <nav className='sidebar-nav'>
+      <nav className='sidebar-nav' style={{ display: 'flex', flexDirection: isDesktop ? 'column' : 'row' }}>
         <NavLink to='/' end className={getNavLinkClass}>
-          <Compass size={22} />
-          <span>Discover</span>
+          <Home size={22} />
+          <span>Feed</span>
         </NavLink>
 
         <NavLink to='/chat' className={getNavLinkClass}>
@@ -32,37 +31,34 @@ const Sidebar = () => {
           <span>Chat</span>
         </NavLink>
 
-        <NavLink to='/top' className={getNavLinkClass}>
-          <TrendingUp size={22} />
-          <span>Top</span>
-        </NavLink>
-
         <NavLink to='/my-posts' className={getNavLinkClass}>
           <Archive size={22} />
-          <span>My Activity</span>
+          <span>Activity</span>
         </NavLink>
+
+        <div
+          style={{
+            display: isDesktop ? 'block' : 'none',
+            height: '1px',
+            background: 'var(--glass-border)',
+            margin: '0.5rem 1rem',
+          }}
+        />
 
         <NavLink to='/settings' className={getNavLinkClass}>
           <Settings size={22} />
           <span>Settings</span>
         </NavLink>
 
-        <NavLink to='/rules' className={getNavLinkClass}>
-          <BookOpen size={22} />
-          <span>Rules</span>
-        </NavLink>
-
         {isAdmin && (
-          <NavLink to='/admin' className={getNavLinkClass}>
-            <ShieldAlert size={22} color='var(--accent-red)' />
+          <NavLink
+            to='/admin'
+            className={getNavLinkClass}
+            style={{ color: 'var(--accent-red)' }}>
+            <ShieldAlert size={22} />
             <span>Admin</span>
           </NavLink>
         )}
-
-        <NavLink to='/about' className={getNavLinkClass}>
-          <Info size={22} />
-          <span>About</span>
-        </NavLink>
       </nav>
     </aside>
   );

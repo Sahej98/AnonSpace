@@ -44,21 +44,25 @@ const Onboarding = () => {
       <div
         className='chat-page-wrapper small-container'
         style={{ maxWidth: '400px' }}>
-        <div
-          style={{
-            height: '320px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          }}>
+        <div className='onboarding-text-container'>
           {SLIDES.map(
             (slide, index) =>
               currentSlide === index && (
-                <div key={index} style={{ animation: 'fadeIn 0.5s ease' }}>
+                <div key={index} className='fade-in' style={{ width: '100%' }}>
                   <div
                     className='icon-wrapper'
-                    style={{ margin: '0 auto 2rem' }}>
-                    <slide.icon size={48} color='var(--primary)' />
+                    style={{
+                      margin: '0 auto 2rem',
+                      width: '3.5rem',
+                      height: '3.5rem',
+                      background: 'var(--input-bg)',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <slide.icon size={32} color='var(--primary)' />
                   </div>
                   <h1 className='chat-page-title'>{slide.title}</h1>
                   <p
@@ -93,7 +97,10 @@ const Onboarding = () => {
           ))}
         </div>
 
-        <button className='confess-button' onClick={handleNext}>
+        <button
+          className='confess-button'
+          onClick={handleNext}
+          style={{ width: '100%' }}>
           <span>
             {currentSlide === SLIDES.length - 1 ? 'Get Started' : 'Next'}
           </span>

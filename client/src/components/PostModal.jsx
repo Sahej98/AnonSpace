@@ -1,23 +1,49 @@
 import React, { useState, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, BarChart2, AlignLeft, Plus, X } from 'lucide-react';
+import {
+  ChevronDown,
+  BarChart2,
+  AlignLeft,
+  Plus,
+  X,
+  Smile,
+} from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
 import { useOnClickOutside } from '../hooks/useOnClickOutside.js';
+import CustomEmojiPicker from './CustomEmojiPicker.jsx';
 
+// Combined and expanded list from Home.jsx and existing modal
 const CATEGORIES = [
   'Relationships',
+  'Funny',
+  'School',
+  'Confessions',
+  'Advice',
+  'Random',
+  'Gaming',
+  'Music',
+  'Tech',
+  'Politics',
+  'Sports',
+  'Art',
+  'Books',
   'Campus Life',
   'Mental Health',
-  'Funny',
-  'Random',
+  'Movies',
+  'Food',
+  'Travel',
+  'Work',
+  'Pets',
 ];
-const MAX_CHAR_LIMIT = 280;
+const MAX_CHAR_LIMIT = 500;
 
 const PostModal = ({ isOpen, onClose, onAddPost }) => {
   const [content, setContent] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [customTag, setCustomTag] = useState('');
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
 
   // Poll State
   const [postType, setPostType] = useState('text'); // 'text' | 'poll'
@@ -25,15 +51,27 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
 
   const addToast = useToast();
   const categoryRef = useRef(null);
+  const emojiRef = useRef(null);
 
   useOnClickOutside(categoryRef, () => setIsCategoryOpen(false));
+  useOnClickOutside(emojiRef, () => setShowEmoji(false));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!content.trim() || !selectedCategory || isSubmitting) {
-      if (!selectedCategory) addToast('Please select a category.', 'error');
+    if (!content.trim() || isSubmitting) {
+      if (!content.trim()) addToast('Post content is required.', 'error');
       return;
     }
+
+    // Tag logic: Prefer custom tag if present, else category, else 'General'
+    let finalTag = customTag.trim()
+      ? customTag.trim()
+      : selectedCategory
+        ? selectedCategory
+        : 'General';
+    // Ensure hashtag
+    if (!finalTag.startsWith('#'))
+      finalTag = `#${finalTag.replace(/\s+/g, '')}`;
 
     if (postType === 'poll') {
       const validOptions = pollOptions.filter((o) => o.trim() !== '');
@@ -44,7 +82,7 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
     }
 
     setIsSubmitting(true);
-    const tags = [`#${selectedCategory.replace(/\s+/g, '')}`];
+    const tags = [finalTag];
 
     // Prepare Poll Options
     const finalPollOptions =
@@ -61,6 +99,7 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
     if (success) {
       setContent('');
       setSelectedCategory(null);
+      setCustomTag('');
       setPollOptions(['', '']);
       setPostType('text');
       addToast('Posted anonymously!', 'success');
@@ -73,6 +112,7 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
 
   const handleSelectCategory = (category) => {
     setSelectedCategory(category);
+    setCustomTag(''); // Clear custom if selecting predefined
     setIsCategoryOpen(false);
   };
 
@@ -91,6 +131,11 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
       const newOptions = pollOptions.filter((_, i) => i !== index);
       setPollOptions(newOptions);
     }
+  };
+
+  const onEmojiClick = (emoji) => {
+    setContent((prev) => prev + emoji);
+    setShowEmoji(false);
   };
 
   const charCount = content.length;
@@ -166,7 +211,7 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
                 </div>
               </div>
 
-              <div className='textarea-wrapper'>
+              <div className='textarea-wrapper' ref={emojiRef}>
                 <textarea
                   className='styled-textarea'
                   value={content}
@@ -176,12 +221,35 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
                       ? 'Ask a question...'
                       : 'Share your secrets, thoughts, or stories here...'
                   }
-                  style={{ height: postType === 'poll' ? '80px' : '120px' }}
+                  style={{ height: postType === 'poll' ? '80px' : '150px' }}
                 />
+                <button
+                  type='button'
+                  onClick={() => setShowEmoji(!showEmoji)}
+                  style={{
+                    position: 'absolute',
+                    bottom: '13px',
+                    left: '10px',
+                    color: 'var(--text-muted)',
+                  }}>
+                  <Smile size={20} />
+                </button>
                 <div
                   className={`char-counter ${charCount > MAX_CHAR_LIMIT ? 'error' : ''}`}>
                   {charCount}/{MAX_CHAR_LIMIT}
                 </div>
+
+                {showEmoji && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '40px',
+                      left: 0,
+                      zIndex: 50,
+                    }}>
+                    <CustomEmojiPicker onEmojiClick={onEmojiClick} />
+                  </div>
+                )}
               </div>
 
               {postType === 'poll' && (
@@ -196,6 +264,10 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
                       }}>
                       <input
                         className='comment-input'
+                        style={{
+                          borderRadius: '12px',
+                          padding: '0.6rem 0.85rem',
+                        }}
                         placeholder={`Option ${idx + 1}`}
                         value={opt}
                         onChange={(e) =>
@@ -229,7 +301,13 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
                 </div>
               )}
 
-              <div className='category-select-wrapper'>
+              <div
+                className='category-select-wrapper'
+                style={{
+                  display: 'flex',
+                  gap: '0.5rem',
+                  flexDirection: 'column',
+                }}>
                 <div className='category-dropdown-container' ref={categoryRef}>
                   <button
                     type='button'
@@ -237,8 +315,8 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
                     className={`category-button ${isCategoryOpen ? 'is-open' : ''} ${selectedCategory ? 'has-selection' : ''}`}>
                     <span>
                       {selectedCategory
-                        ? `Category: ${selectedCategory}`
-                        : 'Select a Category'}
+                        ? `Tag: #${selectedCategory}`
+                        : 'Select a Tag (Optional)'}
                     </span>
                     <ChevronDown size={20} />
                   </button>
@@ -254,12 +332,34 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
                             key={cat}
                             className='category-item'
                             onClick={() => handleSelectCategory(cat)}>
-                            {cat}
+                            #{cat}
                           </li>
                         ))}
                       </motion.ul>
                     )}
                   </AnimatePresence>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    marginTop: '0.5rem',
+                  }}>
+                  <span
+                    style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    OR
+                  </span>
+                  <input
+                    className='comment-input'
+                    style={{ borderRadius: '12px', padding: '0.6rem 0.85rem' }}
+                    placeholder='Custom tag (e.g. #FinalsWeek)'
+                    value={customTag}
+                    onChange={(e) => {
+                      setCustomTag(e.target.value);
+                      setSelectedCategory(null);
+                    }}
+                  />
                 </div>
               </div>
 
@@ -275,7 +375,6 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
                   className='submit-button'
                   disabled={
                     !content.trim() ||
-                    !selectedCategory ||
                     isSubmitting ||
                     content.length > MAX_CHAR_LIMIT
                   }>

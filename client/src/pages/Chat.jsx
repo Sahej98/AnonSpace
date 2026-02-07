@@ -1,28 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  MessagesSquare,
   ShieldCheck,
   Timer,
   UserPlus,
-  Wifi,
-  Search,
   SendHorizontal,
   XCircle,
+  Flag,
+  Smile,
 } from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
 import { apiFetch } from '../api.js';
 import { useSocket } from '../contexts/SocketContext.jsx';
 import { useUser } from '../contexts/UserContext.jsx';
+import CustomEmojiPicker from '../components/CustomEmojiPicker.jsx';
+import { useOnClickOutside } from '../hooks/useOnClickOutside.js';
 
 const Chat = () => {
-  const [viewState, setViewState] = useState('intro'); // intro, scanning, active
+  const [viewState, setViewState] = useState('intro');
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [expiresAt, setExpiresAt] = useState(null);
+  const [currentChatId, setCurrentChatId] = useState(null);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [timeLeft, setTimeLeft] = useState('');
+
   const { userId } = useUser();
   const socket = useSocket();
   const addToast = useToast();
   const messagesEndRef = useRef(null);
+  const inputAreaRef = useRef(null);
+
+  useOnClickOutside(inputAreaRef, () => setShowEmoji(false));
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -30,9 +38,30 @@ const Chat = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, viewState]);
 
-  // Initial Status Check
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (expiresAt) {
+        const now = new Date();
+        const end = new Date(expiresAt);
+        const diff = end - now;
+        if (diff <= 0) {
+          setTimeLeft('Expired');
+          setViewState('intro');
+        } else {
+          const hours = Math.floor(diff / (1000 * 60 * 60));
+          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+          setTimeLeft(
+            `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
+          );
+        }
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+
   useEffect(() => {
     const checkStatus = async () => {
       try {
@@ -43,6 +72,7 @@ const Chat = () => {
           setViewState('active');
           setMessages(data.messages);
           setExpiresAt(data.expiresAt);
+          setCurrentChatId(data.chatId);
         } else if (data.status === 'scanning') {
           setViewState('scanning');
         } else {
@@ -55,26 +85,32 @@ const Chat = () => {
     checkStatus();
   }, []);
 
-  // Socket Listeners
   useEffect(() => {
     if (!socket) return;
 
     socket.on('chat_matched', ({ chatId, expiresAt }) => {
       setViewState('active');
       setExpiresAt(expiresAt);
+      setCurrentChatId(chatId);
       addToast('Match found! Say hello.', 'success');
       setMessages([]);
     });
 
     socket.on('receive_message', (msg) => {
-      setMessages((prev) => [msg, ...prev].slice(0, 5)); // Keep only last 5
+      setMessages((prev) => {
+        if (prev.some((m) => m._id === msg._id)) return prev;
+        // Limit to last 10 messages on client side for visual consistency
+        const updated = [...prev, msg];
+        return updated.slice(-10);
+      });
     });
 
     socket.on('chat_ended', () => {
       setViewState('intro');
       setMessages([]);
       setExpiresAt(null);
-      addToast('Chat ended by partner or expired.', 'info');
+      setCurrentChatId(null);
+      addToast('Chat ended.', 'info');
     });
 
     return () => {
@@ -91,6 +127,7 @@ const Chat = () => {
       const data = await res.json();
       if (data.status === 'active') {
         setViewState('active');
+        setCurrentChatId(data.chatId);
         addToast('Connected instantly!', 'success');
       }
     } catch (e) {
@@ -104,58 +141,176 @@ const Chat = () => {
     setViewState('intro');
   };
 
+  const handleReportChat = async () => {
+    if (!currentChatId) return;
+    if (!confirm('Report this chat conversation? This will end the chat.'))
+      return;
+
+    await apiFetch('/api/report', {
+      method: 'POST',
+      body: JSON.stringify({
+        targetType: 'chat',
+        targetId: currentChatId,
+        reason: 'User reported chat',
+      }),
+    });
+    addToast('Chat reported.', 'info');
+    handleCancel();
+  };
+
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
+    const content = newMessage;
+    setNewMessage('');
+    setShowEmoji(false);
+
     try {
       await apiFetch('/api/chat/message', {
         method: 'POST',
-        body: JSON.stringify({ content: newMessage }),
+        body: JSON.stringify({ content }),
       });
-      setNewMessage('');
     } catch (e) {
       addToast('Failed to send', 'error');
+      setNewMessage(content);
     }
+  };
+
+  const onEmojiClick = (emoji) => {
+    setNewMessage((prev) => prev + emoji);
   };
 
   if (viewState === 'active') {
     return (
-      <div className='centered-page-container full-width'>
-        <div className='chat-page-wrapper active'>
-          <div className='card-header'>
-            <div className='card-title'>
-              <span style={{ color: 'var(--accent-green)' }}>●</span>
-              <span>Anonymous Partner</span>
+      <div
+        className='centered-page-container full-width'
+        style={{ padding: 0, height: '100%', overflow: 'hidden' }}>
+        <div className='chat-container-inner'>
+          <div
+            className='app-header'
+            style={{
+              position: 'static',
+              borderBottom: '1px solid var(--glass-border)',
+              background: 'var(--bg-surface)',
+            }}>
+            <div className='logo-container'>
+              <span
+                style={{
+                  color: 'var(--accent-green)',
+                  fontSize: '2rem',
+                  lineHeight: '0',
+                }}>
+                •
+              </span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                  Anonymous
+                </div>
+                <div
+                  style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Online • Encrypted
+                </div>
+              </div>
             </div>
-            <button onClick={handleCancel} title='Leave Chat'>
-              <XCircle size={20} color='var(--accent-red)' />
-            </button>
+            {expiresAt && <div className='chat-timer'>{timeLeft}</div>}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={handleReportChat}
+                className='icon-button'
+                style={{ color: 'var(--text-muted)' }}
+                title='Report'>
+                <Flag size={20} />
+              </button>
+              <button
+                onClick={handleCancel}
+                className='icon-button'
+                style={{ color: 'var(--accent-red)' }}
+                title='End Chat'>
+                <XCircle size={24} />
+              </button>
+            </div>
           </div>
 
-          <div className='chat-messages-area'>
-            <div ref={messagesEndRef} />
+          <div
+            className='chat-messages-area'
+            style={{ flexDirection: 'column', justifyContent: 'flex-start' }}>
+            <div className='system-message'>
+              <ShieldCheck
+                size={14}
+                style={{ display: 'inline', marginRight: 4 }}
+              />
+              Messages are ephemeral. Only last 10 messages are visible.
+            </div>
             {messages.map((msg, i) => (
               <div
                 key={i}
                 className={`chat-message-bubble ${msg.senderId === userId ? 'mine' : ''}`}>
-                <p>{msg.content}</p>
+                {msg.content}
               </div>
             ))}
-            <div className='system-message'>
-              Only the last 5 messages are visible.
-            </div>
+            <div ref={messagesEndRef} />
           </div>
 
-          <form className='chat-input-area' onSubmit={sendMessage}>
+          <form
+            className='chat-input-area'
+            onSubmit={sendMessage}
+            ref={inputAreaRef}
+            style={{ position: 'relative' }}>
             <input
               className='comment-input'
+              style={{
+                borderRadius: '99px',
+                padding: '0.8rem 1.2rem',
+                paddingRight: '40px',
+              }}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder='Type a message...'
+              placeholder='Message...'
             />
-            <button className='send-button' type='submit'>
-              <SendHorizontal />
+            <button
+              type='button'
+              onClick={() => setShowEmoji(!showEmoji)}
+              style={{
+                position: 'absolute',
+                right: '80px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-muted)',
+              }}>
+              <Smile size={24} />
+            </button>
+            {showEmoji && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '80px',
+                  right: '20px',
+                  zIndex: 100,
+                }}>
+                <CustomEmojiPicker onEmojiClick={onEmojiClick} />
+              </div>
+            )}
+            <button
+              className='send-button'
+              type='submit'
+              disabled={!newMessage.trim()}
+              style={{
+                background: newMessage.trim()
+                  ? 'var(--primary)'
+                  : 'var(--input-bg)',
+                borderRadius: '50%',
+                width: '46px',
+                height: '46px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+              <SendHorizontal
+                size={20}
+                color={newMessage.trim() ? 'white' : 'var(--text-muted)'}
+              />
             </button>
           </form>
         </div>
@@ -166,21 +321,29 @@ const Chat = () => {
   if (viewState === 'scanning') {
     return (
       <div className='centered-page-container full-width'>
-        <div className='chat-page-wrapper small-container'>
-          <div className='intro-section'>
-            <h1 className='chat-page-title'>Searching...</h1>
-          </div>
+        <div
+          className='chat-page-wrapper small-container'
+          style={{ maxWidth: '400px', margin: 'auto' }}>
           <div className='scanner-container'>
             <div className='scanner-radar'>
               <UserPlus size={32} color='var(--primary)' />
             </div>
-            <p className='scanning-text'>Looking for a partner...</p>
+            <h2
+              style={{
+                fontSize: '1.2rem',
+                fontWeight: 700,
+                marginBottom: '0.5rem',
+              }}>
+              Searching...
+            </h2>
+            <p className='muted-text'>Finding you a partner in the void.</p>
             <button
               className='cancel-button'
               style={{
-                marginTop: '1rem',
+                marginTop: '2rem',
                 border: '1px solid var(--glass-border)',
                 borderRadius: '99px',
+                padding: '0.6rem 2rem',
               }}
               onClick={handleCancel}>
               Cancel
@@ -193,84 +356,84 @@ const Chat = () => {
 
   return (
     <div className='centered-page-container full-width'>
-      <div className='chat-page-wrapper small-container'>
+      <div
+        className='chat-page-wrapper small-container'
+        style={{ maxWidth: '480px', margin: 'auto' }}>
         <div className='intro-section'>
-          <div className='icon-wrapper'>
-            <MessagesSquare size={28} color='var(--primary)' />
-            <div
-              className='wifi-pulse'
-              style={{ position: 'absolute', top: -8, right: -8 }}>
-              <Wifi size={14} />
-            </div>
-          </div>
-          <h1 className='chat-page-title'>Anonymous Chat</h1>
-          <p className='chat-page-subtitle'>
-            Connect with a random user. Messages disappear.
-          </p>
+          <h1 className='chat-page-title'>Live Chat</h1>
+          <p className='chat-page-subtitle'>Experience ephemeral connection.</p>
         </div>
 
         <div
           className='features-list'
-          style={{ textAlign: 'left', margin: '1rem 0 2rem' }}>
+          style={{ textAlign: 'left', margin: '2rem 0' }}>
           <div
-            className='feature-item'
-            style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-            <div className='feature-icon'>
-              <ShieldCheck size={20} color='var(--accent-green)' />
+            className='card'
+            style={{
+              padding: '1rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              gap: '1rem',
+              alignItems: 'center',
+            }}>
+            <div
+              style={{
+                padding: '0.6rem',
+                borderRadius: '10px',
+                background: 'rgba(16, 185, 129, 0.1)',
+                color: 'var(--accent-green)',
+              }}>
+              <ShieldCheck size={20} />
             </div>
-            <div className='feature-text'>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 600 }}>
-                100% Anonymous
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                You are matched using your random ID.
-              </p>
+            <div>
+              <div style={{ fontWeight: 600 }}>Anonymous</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                No profiles. Just keys.
+              </div>
             </div>
           </div>
           <div
-            className='feature-item'
-            style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-            <div className='feature-icon'>
-              <Timer size={20} color='var(--accent-red)' />
+            className='card'
+            style={{
+              padding: '1rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              gap: '1rem',
+              alignItems: 'center',
+            }}>
+            <div
+              style={{
+                padding: '0.6rem',
+                borderRadius: '10px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: 'var(--accent-red)',
+              }}>
+              <Timer size={20} />
             </div>
-            <div className='feature-text'>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 600 }}>Ephemeral</h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Chat ends in 12h. Only last 5 messages visible.
-              </p>
+            <div>
+              <div style={{ fontWeight: 600 }}>Ephemeral</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Chat self-destructs.
+              </div>
             </div>
           </div>
         </div>
 
-        <div
-          className='opt-in-section'
+        <button
+          className='opt-in-button'
+          onClick={handleOptIn}
           style={{
-            borderTop: '1px solid var(--glass-border)',
-            paddingTop: '1.5rem',
-            marginTop: 'auto',
+            width: '100%',
+            padding: '1rem',
+            background: 'var(--primary)',
+            color: 'white',
+            borderRadius: '16px',
+            fontWeight: 600,
+            fontSize: '1rem',
+            boxShadow: '0 8px 20px -4px var(--primary-glow)',
           }}>
-          <p
-            style={{
-              fontSize: '0.75rem',
-              color: 'var(--text-dim)',
-              marginBottom: '1rem',
-            }}>
-            By continuing, you agree to be respectful.
-          </p>
-          <button
-            className='opt-in-button'
-            onClick={handleOptIn}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              background: 'var(--primary)',
-              color: 'white',
-              borderRadius: '8px',
-              fontWeight: 600,
-            }}>
-            I Agree & Start Chat
-          </button>
-        </div>
+          Start Searching
+        </button>
       </div>
     </div>
   );

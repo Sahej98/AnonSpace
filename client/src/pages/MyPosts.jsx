@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../api.js';
 import { Edit2, Trash2, Archive, LoaderCircle } from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
-import PostCard from '../components/PostCard.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const MyPosts = () => {
@@ -70,7 +69,7 @@ const MyPosts = () => {
     );
 
   return (
-    <div className='centered-page-container'>
+    <div className='centered-page-container full-width'>
       <h1 className='feed-header-title' style={{ marginBottom: '1.5rem' }}>
         My Activity
       </h1>
@@ -78,27 +77,39 @@ const MyPosts = () => {
       {posts.length === 0 ? (
         <div
           className='card'
-          style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+          style={{
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            padding: '3rem',
+          }}>
           <Archive size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
           <p>You haven't posted anything yet.</p>
         </div>
       ) : (
-        <div className='post-list-wrapper'>
+        <div className='my-activity-grid'>
           <AnimatePresence>
             {posts.map((post) => (
               <motion.div
                 key={post._id}
                 layout
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}>
-                <div className='post-card' style={{ marginBottom: '1rem' }}>
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                style={{ height: '100%' }}>
+                <div
+                  className='card'
+                  style={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}>
                   {editingId === post._id ? (
-                    <div style={{ padding: '1rem' }}>
+                    <div style={{ padding: '1rem', flex: 1 }}>
                       <textarea
                         className='styled-textarea'
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
+                        style={{ height: '100px' }}
                       />
                       <div
                         style={{
@@ -127,6 +138,7 @@ const MyPosts = () => {
                           borderBottom: '1px solid var(--glass-border)',
                           display: 'flex',
                           justifyContent: 'space-between',
+                          alignItems: 'center',
                         }}>
                         <span
                           style={{
@@ -136,24 +148,36 @@ const MyPosts = () => {
                           {new Date(post.createdAt).toLocaleDateString()}
                         </span>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => startEdit(post)}>
-                            <Edit2 size={16} color='var(--text-muted)' />
+                          <button
+                            onClick={() => startEdit(post)}
+                            className='icon-button'>
+                            <Edit2 size={16} />
                           </button>
-                          <button onClick={() => handleDelete(post._id)}>
-                            <Trash2 size={16} color='var(--accent-red)' />
+                          <button
+                            onClick={() => handleDelete(post._id)}
+                            className='icon-button'
+                            style={{ color: 'var(--accent-red)' }}>
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
                       <div
-                        style={{ padding: '1rem', color: 'var(--text-main)' }}>
+                        style={{
+                          padding: '1.25rem',
+                          color: 'var(--text-main)',
+                          flex: 1,
+                          fontSize: '0.95rem',
+                          lineHeight: '1.5',
+                        }}>
                         {post.content}
                       </div>
                       <div
                         style={{
-                          padding: '0.5rem 1rem',
+                          padding: '0.75rem 1.25rem',
                           background: 'var(--glass-highlight)',
                           fontSize: '0.8rem',
                           color: 'var(--text-dim)',
+                          borderTop: '1px solid var(--glass-border)',
                         }}>
                         {post.likes} Likes • {post.comments?.length || 0}{' '}
                         Comments

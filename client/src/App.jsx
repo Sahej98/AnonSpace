@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
   useLocation,
+  useNavigate,
 } from 'react-router-dom';
 import Sidebar from './components/Sidebar.jsx';
 import Home from './pages/Home.jsx';
@@ -24,8 +25,16 @@ import { UserProvider, useUser } from './contexts/UserContext.jsx';
 import { ThemeProvider } from './contexts/ThemeContext.jsx';
 import { apiFetch } from './api.js';
 import Header from './components/Header.jsx';
+import { playClickSound } from './utils/sound.js';
 
-const FULL_WIDTH_ROUTES = ['/chat', '/settings', '/about', '/rules', '/admin'];
+const FULL_WIDTH_ROUTES = [
+  '/chat',
+  '/settings',
+  '/about',
+  '/rules',
+  '/admin',
+  '/my-posts',
+];
 
 const AppLayout = () => {
   const location = useLocation();
@@ -64,9 +73,8 @@ const AppLayout = () => {
         <Sidebar />
         <main className='main-feed'>
           <Routes>
-            <Route path='/' element={<Home sortOrder='hot' />} />
-            <Route path='/top' element={<Home sortOrder='top' />} />
-            <Route path='/tag/:tagName' element={<Home sortOrder='hot' />} />
+            <Route path='/' element={<Home />} />
+            <Route path='/tag/:tagName' element={<Home />} />
             <Route path='/chat' element={<Chat />} />
             <Route path='/my-posts' element={<MyPosts />} />
             <Route path='/about' element={<About />} />
@@ -89,6 +97,14 @@ const AppLayout = () => {
 
 const AppContent = () => {
   const { appState } = useUser();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Redirect to feed on logout
+    if (appState === 'auth') {
+      navigate('/');
+    }
+  }, [appState, navigate]);
 
   if (appState === 'onboarding') return <Onboarding />;
   if (appState === 'auth') return <AuthSelection />;
@@ -97,6 +113,17 @@ const AppContent = () => {
 };
 
 const App = () => {
+  useEffect(() => {
+    const handleClick = (e) => {
+      const target = e.target.closest('button, a, .clickable');
+      if (target) {
+        playClickSound();
+      }
+    };
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
+
   return (
     <>
       <ThemeProvider>

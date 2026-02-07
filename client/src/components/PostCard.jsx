@@ -30,32 +30,52 @@ const formatTimeAgo = (dateString) => {
 
 const Poll = ({ post }) => {
   const { userId } = useUser();
-  const [localVotes, setLocalVotes] = useState(null); // Optimistic UI
-  const totalVotes =
-    post.pollOptions.reduce((acc, opt) => acc + opt.votes.length, 0) +
-    (localVotes ? 1 : 0);
-  const hasVoted =
-    post.pollOptions.some((opt) => opt.votes.includes(userId)) ||
-    localVotes !== null;
+  const addToast = useToast();
+  const [localVotes, setLocalVotes] = useState(null);
+
+  const serverTotalVotes = post.pollOptions.reduce(
+    (acc, opt) => acc + opt.votes.length,
+    0,
+  );
+  const hasVotedServer = post.pollOptions.some((opt) =>
+    opt.votes.includes(userId),
+  );
+  const hasVoted = hasVotedServer || localVotes !== null;
+  const totalVotes = hasVotedServer
+    ? serverTotalVotes
+    : localVotes !== null
+      ? serverTotalVotes + 1
+      : serverTotalVotes;
 
   const handleVote = async (optionIndex) => {
     if (hasVoted) return;
-    setLocalVotes(optionIndex); // Optimistic
+    setLocalVotes(optionIndex);
+
     try {
-      await apiFetch(`/api/posts/${post._id}/vote`, {
+      const res = await apiFetch(`/api/posts/${post._id}/vote`, {
         method: 'POST',
         body: JSON.stringify({ optionIndex }),
       });
+      if (!res.ok) {
+        const data = await res.json();
+        addToast(data.error || 'Vote failed', 'error');
+        setLocalVotes(null);
+      }
     } catch (e) {
       console.error(e);
+      setLocalVotes(null);
     }
   };
 
   return (
     <div className='poll-container'>
+      <span className='poll-badge'>POLL</span>
       {post.pollOptions.map((option, idx) => {
-        const votesForOption =
-          option.votes.length + (localVotes === idx ? 1 : 0);
+        let votesForOption = option.votes.length;
+        if (localVotes === idx && !option.votes.includes(userId)) {
+          votesForOption += 1;
+        }
+
         const percentage =
           totalVotes === 0
             ? 0
@@ -67,11 +87,20 @@ const Poll = ({ post }) => {
             key={idx}
             className='poll-option'
             onClick={() => handleVote(idx)}
-            style={{ borderColor: isSelected ? 'var(--primary)' : '' }}>
+            style={{
+              borderColor: isSelected
+                ? 'var(--primary)'
+                : 'var(--glass-border)',
+              background: isSelected
+                ? 'rgba(99, 102, 241, 0.08)'
+                : 'var(--input-bg)',
+            }}>
             {/* Background Bar */}
-            <div
+            <motion.div
               className='poll-bar'
-              style={{ width: hasVoted ? `${percentage}%` : '0%' }}
+              initial={{ width: 0 }}
+              animate={{ width: hasVoted ? `${percentage}%` : '0%' }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
             />
 
             <div className='poll-content'>
@@ -87,9 +116,9 @@ const Poll = ({ post }) => {
         style={{
           fontSize: '0.8rem',
           color: 'var(--text-dim)',
-          marginTop: '0.25rem',
+          textAlign: 'right',
         }}>
-        {totalVotes} votes
+        {totalVotes} vote{totalVotes !== 1 ? 's' : ''}
       </div>
     </div>
   );
@@ -115,16 +144,27 @@ const PostCard = ({ post }) => {
     setShowMenu(false);
   };
 
-  const handleReport = () => {
-    addToast('Report modal would open here', 'info');
+  const handleReport = async () => {
+    const response = await apiFetch('/api/report', {
+      method: 'POST',
+      body: JSON.stringify({
+        targetType: 'post',
+        targetId: post._id,
+        reason: 'User reported via menu',
+      }),
+    });
+    if (response.ok) addToast('Report submitted.', 'info');
+    else addToast('Failed to report.', 'error');
     setShowMenu(false);
   };
+
+  const isPoll = post.type === 'poll';
 
   return (
     <div className='post-card'>
       <div className='post-content-wrapper'>
         <UserAvatar alias={alias} />
-        <div className='post-body' style={{ flex: 1 }}>
+        <div className='post-body' style={{ flex: 1, minWidth: 0 }}>
           <div className='post-header'>
             <div className='user-info'>
               <span className='alias-name' style={{ color: alias.color }}>
@@ -150,7 +190,8 @@ const PostCard = ({ post }) => {
                     className='post-menu-dropdown'
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}>
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    style={{ transformOrigin: 'top right' }}>
                     <button className='post-menu-item' onClick={handleCopyLink}>
                       <LinkIcon size={16} />
                       Copy Link
@@ -173,34 +214,38 @@ const PostCard = ({ post }) => {
 
           <p className='post-content'>{post.content}</p>
 
-          {post.type === 'poll' && <Poll post={post} />}
+          {isPoll && <Poll post={post} />}
         </div>
       </div>
-      <div className='post-actions-wrapper'>
-        <PostActions
-          post={post}
-          onCommentClick={() => setAreCommentsVisible(!areCommentsVisible)}
-        />
-      </div>
 
-      <AnimatePresence>
-        {areCommentsVisible && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-            style={{ overflow: 'hidden' }}>
-            <div className='comments-wrapper'>
-              <Comments
-                postId={post._id}
-                initialComments={post.comments || []}
-                postUserId={post.userId}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {!isPoll && (
+        <>
+          <div className='post-actions-wrapper'>
+            <PostActions
+              post={post}
+              onCommentClick={() => setAreCommentsVisible(!areCommentsVisible)}
+            />
+          </div>
+          <AnimatePresence>
+            {areCommentsVisible && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                style={{ overflow: 'hidden' }}>
+                <div className='comments-wrapper'>
+                  <Comments
+                    postId={post._id}
+                    initialComments={post.comments || []}
+                    postUserId={post.userId}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
+      )}
     </div>
   );
 };

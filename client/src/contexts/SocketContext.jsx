@@ -1,26 +1,29 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 
 const SocketContext = createContext(null);
 
 export const useSocket = () => {
-    return useContext(SocketContext);
+  return useContext(SocketContext);
 };
 
 export const SocketProvider = ({ children }) => {
-    const [socket, setSocket] = useState(null);
+  const [socket, setSocket] = useState(null);
 
-    useEffect(() => {
-        const newSocket = io('http://localhost:3001');
-        setSocket(newSocket);
+  useEffect(() => {
+    // Use the API URL environment variable for production, or fallback to localhost
+    const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-        return () => newSocket.close();
-    }, []);
+    const newSocket = io(SOCKET_URL, {
+      withCredentials: true, // Important for CORS
+    });
 
-    return (
-        <SocketContext.Provider value={socket}>
-            {children}
-        </SocketContext.Provider>
-    );
+    setSocket(newSocket);
+
+    return () => newSocket.close();
+  }, []);
+
+  return (
+    <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>
+  );
 };

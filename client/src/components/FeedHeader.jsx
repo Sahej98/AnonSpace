@@ -6,11 +6,14 @@ import { Edit3 } from 'lucide-react';
 const FeedHeader = () => {
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
 
-  const handleAddPost = async (content, tags) => {
+  const handleAddPost = async (content, tags, type, pollOptions) => {
     try {
+      const body = { content, tags, type };
+      if (type === 'poll') body.pollOptions = pollOptions;
+
       const response = await apiFetch('/api/posts', {
         method: 'POST',
-        body: JSON.stringify({ content, tags }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -26,15 +29,17 @@ const FeedHeader = () => {
   return (
     <>
       <div className='feed-header'>
-        <h1 className='feed-header-title'>The Void</h1>
-        <p className='feed-header-subtitle'>
-          A place for secrets, confessions, and unfiltered thoughts.
-        </p>
+        <div className='feed-header-left'>
+          <h1 className='feed-header-title'>The Void</h1>
+          <p className='feed-header-subtitle'>
+            Speak freely. Your secrets are safe here.
+          </p>
+        </div>
         <button
           className='confess-button'
           onClick={() => setIsPostModalOpen(true)}>
           <Edit3 size={18} />
-          <span>Confess Anonymously</span>
+          <span>Whisper</span>
         </button>
       </div>
       <PostModal
