@@ -9,6 +9,7 @@ import {
   Smile,
 } from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
+import { useDialog } from '../hooks/useDialog.js';
 import { apiFetch } from '../api.js';
 import { useSocket } from '../contexts/SocketContext.jsx';
 import { useUser } from '../contexts/UserContext.jsx';
@@ -27,8 +28,10 @@ const Chat = () => {
   const { userId } = useUser();
   const socket = useSocket();
   const addToast = useToast();
+  const dialog = useDialog();
   const messagesEndRef = useRef(null);
   const inputAreaRef = useRef(null);
+  const isLowWidth = window.innerWidth < 412;
 
   useOnClickOutside(inputAreaRef, () => setShowEmoji(false));
 
@@ -136,15 +139,27 @@ const Chat = () => {
     }
   };
 
-  const handleCancel = async () => {
+  const handleCancel = async (skipConfirm = false) => {
+    if (!skipConfirm && viewState === 'active') {
+      const confirmed = await dialog.confirm('End this chat session?', {
+        title: 'End Chat',
+        isDanger: true,
+      });
+      if (!confirmed) return;
+    }
+
     await apiFetch('/api/chat/leave', { method: 'POST' });
     setViewState('intro');
   };
 
   const handleReportChat = async () => {
     if (!currentChatId) return;
-    if (!confirm('Report this chat conversation? This will end the chat.'))
-      return;
+
+    const confirmed = await dialog.confirm(
+      'Report this chat conversation? This will end the chat.',
+      { title: 'Report Chat', isDanger: true },
+    );
+    if (!confirmed) return;
 
     await apiFetch('/api/report', {
       method: 'POST',
@@ -155,7 +170,7 @@ const Chat = () => {
       }),
     });
     addToast('Chat reported.', 'info');
-    handleCancel();
+    handleCancel(true); // Skip second confirmation
   };
 
   const sendMessage = async (e) => {
@@ -223,7 +238,7 @@ const Chat = () => {
                 <Flag size={20} />
               </button>
               <button
-                onClick={handleCancel}
+                onClick={() => handleCancel(false)}
                 className='icon-button'
                 style={{ color: 'var(--accent-red)' }}
                 title='End Chat'>
@@ -285,7 +300,7 @@ const Chat = () => {
                 style={{
                   position: 'absolute',
                   bottom: '80px',
-                  right: '20px',
+                  right: isLowWidth ? '340px' : '400px',
                   zIndex: 100,
                 }}>
                 <CustomEmojiPicker onEmojiClick={onEmojiClick} />
@@ -345,7 +360,7 @@ const Chat = () => {
                 borderRadius: '99px',
                 padding: '0.6rem 2rem',
               }}
-              onClick={handleCancel}>
+              onClick={() => handleCancel(true)}>
               Cancel
             </button>
           </div>

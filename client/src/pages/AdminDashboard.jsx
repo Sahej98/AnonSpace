@@ -10,11 +10,16 @@ import {
   RotateCcw,
   ArrowLeft,
   MessageSquare,
+  Shield,
+  Skull,
 } from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
+import { useDialog } from '../hooks/useDialog.js';
+import { useUser } from '../contexts/UserContext.jsx';
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('users');
+  const { isAdmin } = useUser();
+  const [activeTab, setActiveTab] = useState(isAdmin ? 'users' : 'reports');
   const [users, setUsers] = useState([]);
   const [reports, setReports] = useState([]);
   const [stats, setStats] = useState({
@@ -29,12 +34,13 @@ const AdminDashboard = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const addToast = useToast();
+  const dialog = useDialog();
 
   useEffect(() => {
     fetchStats();
-    if (activeTab === 'users' && !selectedUser) fetchUsers();
+    if (activeTab === 'users' && !selectedUser && isAdmin) fetchUsers();
     if (activeTab === 'reports') fetchReports();
-  }, [activeTab, selectedUser]);
+  }, [activeTab, selectedUser, isAdmin]);
 
   const fetchStats = async () => {
     try {
@@ -74,17 +80,25 @@ const AdminDashboard = () => {
     fetchUserHistory(user._id);
   };
 
-  const handleUserAction = async (userId, action) => {
+  const handleUserAction = async (userId, action, description) => {
+    const confirmed = await dialog.confirm(
+      description || `Are you sure you want to perform: ${action}?`,
+      {
+        title: 'Confirm Action',
+        isDanger: ['ban', 'demote_mod', 'delete'].includes(action),
+      },
+    );
+    if (!confirmed) return;
+
     try {
       const res = await apiFetch(`/api/admin/users/${userId}/action`, {
         method: 'POST',
         body: JSON.stringify({ action }),
       });
       if (res.ok) {
-        addToast(`Action ${action} successful`, 'success');
-        // Update local state if needed
+        addToast(`Action successful`, 'success');
+        // Update local state
         if (selectedUser && selectedUser._id === userId) {
-          // simplistic toggle for UI update
           const updated = await res.json();
           setSelectedUser(updated);
         } else {
@@ -93,6 +107,23 @@ const AdminDashboard = () => {
       }
     } catch (e) {
       addToast('Action failed', 'error');
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    const confirmed = await dialog.confirm(
+      `PERMANENTLY DELETE USER ${userId}? This will remove the user and ALL their posts. This cannot be undone.`,
+      { title: 'Delete User', confirmText: 'DELETE', isDanger: true },
+    );
+    if (!confirmed) return;
+
+    try {
+      await apiFetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      addToast('User deleted successfully', 'success');
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (e) {
+      addToast('Delete failed', 'error');
     }
   };
 
@@ -111,9 +142,12 @@ const AdminDashboard = () => {
   };
 
   const handleDeleteContent = async (type, id, reportId = null) => {
-    // Currently only post deletion is fully supported via API for admin,
-    // ensuring 'type' is handled correctly.
     if (type === 'post') {
+      const confirmed = await dialog.confirm('Delete this post permanently?', {
+        isDanger: true,
+      });
+      if (!confirmed) return;
+
       try {
         await apiFetch(`/api/posts/${id}`, { method: 'DELETE' });
         if (reportId) await handleResolveReport(reportId);
@@ -162,7 +196,21 @@ const AdminDashboard = () => {
               </span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: '1rem',
+              marginBottom: '1rem',
+              flexWrap: 'wrap',
+            }}>
+            {selectedUser.isAdmin && (
+              <span style={{ color: 'gold', fontWeight: 'bold' }}>ADMIN</span>
+            )}
+            {selectedUser.isModerator && (
+              <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>
+                MODERATOR
+              </span>
+            )}
             {selectedUser.isBanned && (
               <span style={{ color: 'var(--accent-red)', fontWeight: 'bold' }}>
                 BANNED
@@ -177,39 +225,115 @@ const AdminDashboard = () => {
               Joined: {new Date(selectedUser.createdAt).toLocaleDateString()}
             </span>
           </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            {selectedUser.isBanned ? (
-              <button
-                className='action-button'
-                onClick={() => handleUserAction(selectedUser._id, 'unban')}
-                style={{ color: 'var(--accent-green)' }}>
-                <RotateCcw size={16} /> Unban
-              </button>
-            ) : (
+
+          {/* Admin Actions Only */}
+          {isAdmin && (
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              {selectedUser.isModerator ? (
+                <button
+                  className='action-button danger'
+                  onClick={() =>
+                    handleUserAction(
+                      selectedUser._id,
+                      'demote_mod',
+                      'Remove moderator privileges?',
+                    )
+                  }>
+                  <Shield size={16} /> Demote Mod
+                </button>
+              ) : (
+                <button
+                  className='action-button'
+                  onClick={() =>
+                    handleUserAction(
+                      selectedUser._id,
+                      'promote_mod',
+                      'Make this user a Moderator?',
+                    )
+                  }>
+                  <Shield size={16} /> Make Mod
+                </button>
+              )}
+
+              <div
+                style={{
+                  width: 1,
+                  background: 'var(--glass-border)',
+                  margin: '0 0.5rem',
+                }}
+              />
+
+              {selectedUser.isBanned ? (
+                <button
+                  className='action-button'
+                  onClick={() =>
+                    handleUserAction(
+                      selectedUser._id,
+                      'unban',
+                      'Unban this user?',
+                    )
+                  }
+                  style={{ color: 'var(--accent-green)' }}>
+                  <RotateCcw size={16} /> Unban
+                </button>
+              ) : (
+                <button
+                  className='action-button danger'
+                  onClick={() =>
+                    handleUserAction(
+                      selectedUser._id,
+                      'ban',
+                      'Ban this user? They will lose access immediately.',
+                    )
+                  }>
+                  <Ban size={16} /> Ban User
+                </button>
+              )}
+
+              {selectedUser.isTimedOut ? (
+                <button
+                  className='action-button'
+                  onClick={() =>
+                    handleUserAction(
+                      selectedUser._id,
+                      'remove_timeout',
+                      'Remove timeout?',
+                    )
+                  }
+                  style={{ color: 'var(--accent-green)' }}>
+                  <Clock size={16} /> Remove Timeout
+                </button>
+              ) : (
+                <button
+                  className='action-button'
+                  onClick={() =>
+                    handleUserAction(
+                      selectedUser._id,
+                      'timeout',
+                      'Timeout user for 24 hours?',
+                    )
+                  }
+                  style={{ color: 'orange' }}>
+                  <Clock size={16} /> Timeout 24h
+                </button>
+              )}
+
+              <div
+                style={{
+                  width: 1,
+                  background: 'var(--glass-border)',
+                  margin: '0 0.5rem',
+                }}
+              />
+
               <button
                 className='action-button danger'
-                onClick={() => handleUserAction(selectedUser._id, 'ban')}>
-                <Ban size={16} /> Ban User
+                onClick={() => handleDeleteUser(selectedUser._id)}
+                style={{ color: 'var(--accent-red)' }}>
+                <Skull size={16} /> DELETE USER
               </button>
-            )}
-            {selectedUser.isTimedOut ? (
-              <button
-                className='action-button'
-                onClick={() =>
-                  handleUserAction(selectedUser._id, 'remove_timeout')
-                }
-                style={{ color: 'var(--accent-green)' }}>
-                <Clock size={16} /> Remove Timeout
-              </button>
-            ) : (
-              <button
-                className='action-button'
-                onClick={() => handleUserAction(selectedUser._id, 'timeout')}
-                style={{ color: 'orange' }}>
-                <Clock size={16} /> Timeout 24h
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <div style={{ width: '100%' }}>
@@ -346,18 +470,20 @@ const AdminDashboard = () => {
           borderBottom: '1px solid var(--glass-border)',
           marginBottom: '1.5rem',
         }}>
-        <button
-          className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
-          onClick={() => setActiveTab('users')}
-          style={{
-            padding: '0.5rem 1rem',
-            borderBottom:
-              activeTab === 'users' ? '2px solid var(--primary)' : 'none',
-            borderRadius: 0,
-          }}>
-          <Users size={18} />
-          <span>User Management</span>
-        </button>
+        {isAdmin && (
+          <button
+            className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('users')}
+            style={{
+              padding: '0.5rem 1rem',
+              borderBottom:
+                activeTab === 'users' ? '2px solid var(--primary)' : 'none',
+              borderRadius: 0,
+            }}>
+            <Users size={18} />
+            <span>User Management</span>
+          </button>
+        )}
         <button
           className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`}
           onClick={() => setActiveTab('reports')}
@@ -372,7 +498,7 @@ const AdminDashboard = () => {
         </button>
       </div>
 
-      {activeTab === 'users' && (
+      {activeTab === 'users' && isAdmin && (
         <div
           className='users-list'
           style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -400,6 +526,9 @@ const AdminDashboard = () => {
                     marginTop: '0.2rem',
                   }}>
                   {u.isAdmin && <span style={{ color: 'gold' }}>ADMIN</span>}
+                  {u.isModerator && (
+                    <span style={{ color: '#3b82f6' }}>MOD</span>
+                  )}
                   {u.isBanned && (
                     <span style={{ color: 'var(--accent-red)' }}>BANNED</span>
                   )}
@@ -451,16 +580,41 @@ const AdminDashboard = () => {
               <p style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>
                 Reason: {r.reason}
               </p>
-              <p
+
+              <div
                 style={{
-                  marginBottom: '1rem',
-                  fontSize: '0.8rem',
-                  fontFamily: 'monospace',
                   background: 'var(--input-bg)',
-                  padding: '0.5rem',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  marginBottom: '1rem',
+                  border: '1px solid var(--glass-border)',
                 }}>
-                Target ID: {r.targetId}
-              </p>
+                <p
+                  style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--text-muted)',
+                    marginBottom: '0.3rem',
+                  }}>
+                  Content Preview:
+                </p>
+                <p
+                  style={{
+                    fontSize: '0.9rem',
+                    fontStyle: 'italic',
+                    color: 'var(--text-main)',
+                  }}>
+                  "{r.contentSnapshot}"
+                </p>
+                <p
+                  style={{
+                    marginTop: '0.5rem',
+                    fontSize: '0.75rem',
+                    fontFamily: 'monospace',
+                    color: 'var(--text-dim)',
+                  }}>
+                  ID: {r.targetId}
+                </p>
+              </div>
 
               <div
                 style={{

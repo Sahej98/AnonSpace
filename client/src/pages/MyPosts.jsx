@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../api.js';
 import { Edit2, Trash2, Archive, LoaderCircle } from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
+import { useDialog } from '../hooks/useDialog.js';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const MyPosts = () => {
@@ -10,6 +11,7 @@ const MyPosts = () => {
   const [editingId, setEditingId] = useState(null);
   const [editContent, setEditContent] = useState('');
   const addToast = useToast();
+  const dialog = useDialog();
 
   useEffect(() => {
     fetchMyPosts();
@@ -28,7 +30,12 @@ const MyPosts = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this post?')) return;
+    const confirmed = await dialog.confirm('Delete this whisper forever?', {
+      isDanger: true,
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
+
     try {
       await apiFetch(`/api/posts/${id}`, { method: 'DELETE' });
       setPosts((prev) => prev.filter((p) => p._id !== id));

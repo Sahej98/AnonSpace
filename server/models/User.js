@@ -19,6 +19,10 @@ const UserSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    isModerator: {
+        type: Boolean,
+        default: false,
+    },
     acceptedTOS: {
         type: Boolean,
         default: false,

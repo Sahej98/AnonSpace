@@ -15,6 +15,7 @@ export const UserProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
   const [showWakeUpMessage, setShowWakeUpMessage] = useState(false);
 
   // States for Flow Control: 'loading' -> 'onboarding' -> 'auth' -> 'app'
@@ -34,6 +35,7 @@ export const UserProvider = ({ children }) => {
         setUserId(data._id);
         setIsAuthenticated(true);
         setIsAdmin(data.isAdmin || false);
+        setIsModerator(data.isModerator || false);
         setAppState('app');
         if (socket) socket.emit('join_user_room', data._id);
         return true;
@@ -105,6 +107,7 @@ export const UserProvider = ({ children }) => {
         setUserId(data._id);
         setIsAuthenticated(true);
         setIsAdmin(data.isAdmin || false);
+        setIsModerator(data.isModerator || false);
 
         // For new identity, always show onboarding
         localStorage.removeItem('anonspaceOnboarding');
@@ -123,12 +126,14 @@ export const UserProvider = ({ children }) => {
     setUserId(null);
     setIsAuthenticated(false);
     setIsAdmin(false);
+    setIsModerator(false);
     setAppState('auth');
   };
 
   const value = {
     userId,
     isAdmin,
+    isModerator,
     appState,
     completeOnboarding,
     login,

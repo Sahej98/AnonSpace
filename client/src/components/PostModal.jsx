@@ -139,6 +139,7 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
   };
 
   const charCount = content.length;
+  const isLowWidth = window.innerWidth < 412;
 
   return (
     <AnimatePresence>
@@ -244,7 +245,7 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
                     style={{
                       position: 'absolute',
                       bottom: '40px',
-                      left: 0,
+                      left: isLowWidth ? '-33px' : '0',
                       zIndex: 50,
                     }}>
                     <CustomEmojiPicker onEmojiClick={onEmojiClick} />

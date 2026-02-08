@@ -9,13 +9,19 @@ export const ThemeProvider = ({ children }) => {
   const [font, setFont] = useState(
     () => localStorage.getItem('anonFont') || 'inter',
   );
+  const [fontSize, setFontSize] = useState(
+    () => parseFloat(localStorage.getItem('anonFontSize')) || 1,
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.setAttribute('data-font', font);
+    document.documentElement.style.setProperty('--font-scale', fontSize);
+
     localStorage.setItem('anonTheme', theme);
     localStorage.setItem('anonFont', font);
-  }, [theme, font]);
+    localStorage.setItem('anonFontSize', fontSize);
+  }, [theme, font, fontSize]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -23,10 +29,19 @@ export const ThemeProvider = ({ children }) => {
 
   const changeTheme = (newTheme) => setTheme(newTheme);
   const changeFont = (newFont) => setFont(newFont);
+  const changeFontSize = (newSize) => setFontSize(newSize);
 
   return (
     <ThemeContext.Provider
-      value={{ theme, font, toggleTheme, changeTheme, changeFont }}>
+      value={{
+        theme,
+        font,
+        fontSize,
+        toggleTheme,
+        changeTheme,
+        changeFont,
+        changeFontSize,
+      }}>
       {children}
     </ThemeContext.Provider>
   );

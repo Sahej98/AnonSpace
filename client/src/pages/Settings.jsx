@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext.jsx';
 import { useUser } from '../contexts/UserContext.jsx';
 import { useToast } from '../hooks/useToast.js';
+import { useDialog } from '../hooks/useDialog.js';
+import { apiFetch } from '../api.js';
 import {
   Bell,
   LogOut,
@@ -13,10 +15,15 @@ import {
   Eye,
   Moon,
   Sun,
+  Type,
+  Volume2,
+  Trash2,
 } from 'lucide-react';
 
 const DARK_THEMES = [
   { id: 'dark', name: 'Midnight', colors: ['#050507', '#6366f1'] },
+  { id: 'abyss', name: 'Abyss', colors: ['#000000', '#3e3e9e'] },
+  { id: 'high-contrast', name: 'Hi-Contrast', colors: ['#000000', '#ffff00'] },
   { id: 'cyberpunk', name: 'Cyberpunk', colors: ['#050014', '#ff00dd'] },
   { id: 'dracula', name: 'Dracula', colors: ['#282a36', '#bd93f9'] },
   { id: 'monokai', name: 'Monokai', colors: ['#272822', '#a6e22e'] },
@@ -27,7 +34,6 @@ const DARK_THEMES = [
   { id: 'sunset', name: 'Sunset', colors: ['#2a1b1b', '#fb923c'] },
   { id: 'coffee', name: 'Coffee', colors: ['#2c241b', '#d4a373'] },
   { id: 'terminal', name: 'Terminal', colors: ['#000000', '#00ff00'] },
-  { id: 'high-contrast', name: 'Hi-Contrast', colors: ['#000000', '#ffff00'] },
   { id: 'slate', name: 'Slate', colors: ['#1e293b', '#94a3b8'] },
   { id: 'navy', name: 'Navy', colors: ['#0a192f', '#64ffda'] },
   { id: 'maroon', name: 'Maroon', colors: ['#2b0a0a', '#dc2626'] },
@@ -38,7 +44,6 @@ const DARK_THEMES = [
   { id: 'fire', name: 'Fire', colors: ['#1a0500', '#ff4500'] },
   { id: 'earth', name: 'Earth', colors: ['#1c1815', '#a8a29e'] },
   { id: 'deep-space', name: 'Deep Space', colors: ['#000000', '#3f51b5'] },
-  { id: 'abyss', name: 'Abyss', colors: ['#020202', '#212121'] },
   { id: 'void', name: 'Void', colors: ['#000000', '#ffffff'] },
 ];
 
@@ -142,7 +147,6 @@ const ThemeCard = ({ name, value, colors, current, onClick }) => {
 
 const FontCard = ({ name, value, current, onClick }) => {
   const isSelected = current === value;
-  // Apply font family directly to preview
   let fontFamily = 'inherit';
   switch (value) {
     case 'inter':
@@ -305,16 +309,63 @@ const SettingsItem = ({
 };
 
 const Settings = () => {
-  const { theme, font, changeTheme, changeFont } = useTheme();
+  const { theme, font, fontSize, changeTheme, changeFont, changeFontSize } =
+    useTheme();
   const { userId, logout } = useUser();
   const [notifications, setNotifications] = useState(true);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(
+    () => localStorage.getItem('anonSoundEnabled') !== 'false',
+  );
+
   const addToast = useToast();
+  const dialog = useDialog();
   const navigate = useNavigate();
+
+  const toggleSound = () => {
+    const newValue = !soundEnabled;
+    setSoundEnabled(newValue);
+    localStorage.setItem('anonSoundEnabled', newValue);
+  };
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(userId);
     addToast('User ID copied to clipboard.', 'success');
+  };
+
+  const handleLogout = async () => {
+    const confirmed = await dialog.confirm(
+      'Are you sure you want to sign out? You will need your User ID to log back in.',
+      { title: 'Sign Out' },
+    );
+    if (confirmed) {
+      logout();
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = await dialog.confirm(
+      'Permanently delete your account and ALL your posts, comments, and data? This action CANNOT be undone.',
+      {
+        title: 'Delete Account',
+        confirmText: 'DELETE EVERYTHING',
+        isDanger: true,
+      },
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const res = await apiFetch('/api/user/me', { method: 'DELETE' });
+      if (res.ok) {
+        addToast('Account deleted successfully.', 'success');
+        logout();
+      } else {
+        throw new Error();
+      }
+    } catch (e) {
+      addToast('Failed to delete account.', 'error');
+    }
   };
 
   return (
@@ -325,7 +376,6 @@ const Settings = () => {
           maxWidth: '900px',
           margin: '0 auto',
           overflowY: 'auto',
-          padding: '2rem',
         }}>
         <div className='intro-section'>
           <h1 className='chat-page-title'>Settings</h1>
@@ -392,6 +442,69 @@ const Settings = () => {
               borderRadius: '12px',
               border: '1px solid var(--glass-border)',
             }}>
+            {/* Font Size Control */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  marginBottom: '0.8rem',
+                }}>
+                <Type size={16} color='var(--primary)' />
+                <p style={{ fontSize: '0.9rem', fontWeight: 600 }}>Font Size</p>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '0.5rem',
+                  background: 'var(--bg-surface)',
+                  padding: '0.3rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--glass-border)',
+                }}>
+                <button
+                  onClick={() => changeFontSize(0.85)}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    borderRadius: '6px',
+                    background:
+                      fontSize === 0.85 ? 'var(--primary)' : 'transparent',
+                    color: fontSize === 0.85 ? 'white' : 'var(--text-muted)',
+                    fontSize: '0.8rem',
+                  }}>
+                  Small
+                </button>
+                <button
+                  onClick={() => changeFontSize(1)}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    borderRadius: '6px',
+                    background:
+                      fontSize === 1 ? 'var(--primary)' : 'transparent',
+                    color: fontSize === 1 ? 'white' : 'var(--text-muted)',
+                    fontSize: '0.9rem',
+                  }}>
+                  Normal
+                </button>
+                <button
+                  onClick={() => changeFontSize(1.15)}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    borderRadius: '6px',
+                    background:
+                      fontSize === 1.15 ? 'var(--primary)' : 'transparent',
+                    color: fontSize === 1.15 ? 'white' : 'var(--text-muted)',
+                    fontSize: '1rem',
+                  }}>
+                  Large
+                </button>
+              </div>
+            </div>
+
             <div
               style={{
                 display: 'flex',
@@ -508,6 +621,14 @@ const Settings = () => {
           />
 
           <SettingsItem
+            icon={Volume2}
+            title='Sound Effects'
+            subtitle='UI interaction sounds'
+            isActive={soundEnabled}
+            onClick={toggleSound}
+          />
+
+          <SettingsItem
             icon={Eye}
             title='Reduce Motion'
             subtitle='Minimize animations'
@@ -551,7 +672,33 @@ const Settings = () => {
             title='Log Out'
             subtitle='Removes ID from device'
             isToggle={false}
-            onClick={logout}
+            onClick={handleLogout}
+          />
+
+          {/* Danger Zone */}
+          <h3
+            className='full-span'
+            style={{
+              fontSize: '0.9rem',
+              color: 'var(--accent-red)',
+              marginTop: '1rem',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+            }}>
+            Danger Zone
+          </h3>
+
+          <SettingsItem
+            className='full-span'
+            icon={Trash2}
+            title='Delete Account'
+            subtitle='Permanently erase all data'
+            isToggle={false}
+            onClick={handleDeleteAccount}
+            style={{
+              borderColor: 'var(--accent-red)',
+              color: 'var(--accent-red)',
+            }}
           />
         </div>
       </div>

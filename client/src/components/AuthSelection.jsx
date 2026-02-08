@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useUser } from '../contexts/UserContext';
-import { Ghost, Key, ArrowRight, LoaderCircle } from 'lucide-react';
+import { ArrowRight, LoaderCircle } from 'lucide-react';
 
 const AuthSelection = () => {
   const { createAccount, login } = useUser();
@@ -34,7 +34,7 @@ const AuthSelection = () => {
         className='chat-page-wrapper small-container'
         style={{ maxWidth: '400px' }}>
         <div className='icon-wrapper' style={{ margin: '0 auto 2rem' }}>
-          <Ghost size={48} color='var(--primary)' />
+          <img src="/logo.png" alt="" style={{height: '75px', width: '75px'}}/>
         </div>
 
         {mode === 'choice' ? (

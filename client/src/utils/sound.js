@@ -1,6 +1,9 @@
 
 export const playClickSound = () => {
     try {
+        const soundEnabled = localStorage.getItem('anonSoundEnabled') !== 'false';
+        if (!soundEnabled) return;
+
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (!AudioContext) return;
 

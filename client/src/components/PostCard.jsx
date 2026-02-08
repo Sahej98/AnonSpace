@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, memo } from 'react';
 import UserAvatar from './UserAvatar.jsx';
 import PostActions from './PostActions.jsx';
 import Comments from './Comments.jsx';
@@ -232,8 +232,7 @@ const PostCard = ({ post }) => {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-                style={{ overflow: 'hidden' }}>
+                transition={{ duration: 0.3, ease: 'easeInOut' }}>
                 <div className='comments-wrapper'>
                   <Comments
                     postId={post._id}
@@ -250,4 +249,4 @@ const PostCard = ({ post }) => {
   );
 };
 
-export default PostCard;
+export default memo(PostCard);

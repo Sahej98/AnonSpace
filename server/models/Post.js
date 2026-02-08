@@ -93,5 +93,10 @@ const PostSchema = new Schema({
     timestamps: true,
 });
 
+// Indexes for performance
+PostSchema.index({ createdAt: -1 });
+PostSchema.index({ likes: -1 });
+PostSchema.index({ tags: 1 });
+PostSchema.index({ isHidden: 1 });
 
 module.exports = mongoose.model('Post', PostSchema);

@@ -28,7 +28,7 @@ const CommentItem = ({ comment, postId, postUserId, onReply }) => {
         </div>
         <div className='comment-bubble'>
           <div className='comment-header'>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span
                 className='commenter-name'
                 style={{ color: comment.alias?.color }}>
@@ -132,6 +132,8 @@ const Comments = ({ postId, initialComments, postUserId }) => {
     if (input) input.focus();
   };
 
+  const isLowWidth = window.innerWidth < 412;
+
   return (
     <div className='comments-container'>
       {replyTo && (
@@ -196,6 +198,7 @@ const Comments = ({ postId, initialComments, postUserId }) => {
               style={{
                 position: 'absolute',
                 bottom: '100%',
+                right: isLowWidth ? '310px':'400px',
                 zIndex: 10,
                 marginBottom: '0.5rem',
               }}>

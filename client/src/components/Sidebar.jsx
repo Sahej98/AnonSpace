@@ -11,7 +11,7 @@ import {
 import { useUser } from '../contexts/UserContext.jsx';
 
 const Sidebar = () => {
-  const { isAdmin } = useUser();
+  const { isAdmin, isModerator } = useUser();
 
   const getNavLinkClass = ({ isActive }) => {
     return isActive ? 'nav-item active' : 'nav-item';
@@ -20,7 +20,12 @@ const Sidebar = () => {
 
   return (
     <aside className='sidebar'>
-      <nav className='sidebar-nav' style={{ display: 'flex', flexDirection: isDesktop ? 'column' : 'row' }}>
+      <nav
+        className='sidebar-nav'
+        style={{
+          display: 'flex',
+          flexDirection: isDesktop ? 'column' : 'row',
+        }}>
         <NavLink to='/' end className={getNavLinkClass}>
           <Home size={22} />
           <span>Feed</span>
@@ -50,7 +55,7 @@ const Sidebar = () => {
           <span>Settings</span>
         </NavLink>
 
-        {isAdmin && (
+        {(isAdmin || isModerator) && (
           <NavLink
             to='/admin'
             className={getNavLinkClass}

@@ -37,6 +37,17 @@ const io = new Server(server, {
 });
 
 const filter = new Filter();
+// Safe clean function to prevent crashes on emoji-only strings
+const safeClean = (text) => {
+    try {
+        if (!text || !text.trim()) return "";
+        return filter.clean(text);
+    } catch (e) {
+        // If filter fails (e.g. on pure emojis), return original text
+        return text;
+    }
+};
+
 const PORT = process.env.PORT || 3001;
 const ADMIN_ID = '111111111111111111111111'; // Hardcoded Admin ID
 
@@ -84,9 +95,15 @@ const requireAdmin = (req, res, next) => {
     next();
 };
 
-// --- Notifications Helper ---
+const requireMod = (req, res, next) => {
+    if (!req.user || (!req.user.isAdmin && !req.user.isModerator)) return res.status(403).json({ error: "Moderator access required." });
+    next();
+};
+
+// --- Helpers ---
 const createNotification = async (recipientId, type, targetId, senderAlias, text) => {
-    if (recipientId.toString() === senderAlias.userId?.toString()) return; // Don't notify self
+    // Redundant check, but safe
+    if (recipientId.toString() === senderAlias.userId?.toString()) return;
 
     try {
         const notif = new Notification({
@@ -100,6 +117,63 @@ const createNotification = async (recipientId, type, targetId, senderAlias, text
         io.to(recipientId.toString()).emit('new_notification', notif);
     } catch (e) {
         console.error("Notif error", e);
+    }
+};
+
+const deleteUserAndData = async (userId) => {
+    const uid = new mongoose.Types.ObjectId(userId);
+
+    // 1. Delete User
+    await User.findByIdAndDelete(uid);
+
+    // 2. Delete Posts by User
+    await Post.deleteMany({ userId: uid });
+
+    // 3. Delete Notifications received by User
+    await Notification.deleteMany({ recipient: uid });
+
+    // 4. Delete Reports made by User
+    await Report.deleteMany({ reportedBy: uid });
+
+    // 5. Delete Messages sent by User
+    await Message.deleteMany({ senderId: uid });
+
+    // 6. Remove likes/dislikes from all Posts
+    await Post.updateMany({}, {
+        $pull: {
+            likedBy: uid,
+            dislikedBy: uid
+        }
+    });
+
+    // 7. Remove comments by User from all Posts (Deep Clean)
+    // First, find posts that have comments by this user
+    const postsWithComments = await Post.find({ "comments.userId": uid });
+    for (const p of postsWithComments) {
+        p.comments = p.comments.filter(c => !c.userId.equals(uid));
+        await p.save();
+    }
+
+    // 8. Remove replies by User from all Posts (Deep Clean)
+    // Find posts that have replies by this user
+    const postsWithReplies = await Post.find({ "comments.replies.userId": uid });
+    for (const p of postsWithReplies) {
+        p.comments.forEach(c => {
+            if (c.replies) {
+                c.replies = c.replies.filter(r => !r.userId.equals(uid));
+            }
+        });
+        await p.save();
+    }
+
+    // 9. Close/Leave Chats
+    const chats = await Chat.find({ participants: uid });
+    for (const chat of chats) {
+        chat.isActive = false;
+        await chat.save();
+        chat.participants.forEach(pId => {
+            io.to(pId.toString()).emit('chat_ended');
+        });
     }
 };
 
@@ -134,6 +208,17 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+app.delete('/api/user/me', requireAuth, async (req, res) => {
+    try {
+        if (req.user.isAdmin) return res.status(400).json({ error: "Admin cannot delete self." });
+        await deleteUserAndData(req.user._id);
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Failed to delete account" });
+    }
+});
+
 // --- Notification Endpoints ---
 app.get('/api/notifications', requireAuth, async (req, res) => {
     try {
@@ -165,17 +250,28 @@ app.post('/api/notifications/read-all', requireAuth, async (req, res) => {
 });
 
 // --- Admin Endpoints --- 
-app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/stats', requireAuth, requireMod, async (req, res) => {
     const userCount = await User.countDocuments();
     const postCount = await Post.countDocuments();
     const reportCount = await Report.countDocuments();
     res.json({ userCount, postCount, reportCount });
 });
-app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/users', requireAuth, requireMod, async (req, res) => {
     const users = await User.find().sort({ createdAt: -1 }).limit(50);
     res.json(users);
 });
-app.get('/api/admin/users/:id/history', requireAuth, requireAdmin, async (req, res) => {
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        if (req.params.id === req.user._id.toString()) {
+            return res.status(400).json({ error: "Cannot delete self" });
+        }
+        await deleteUserAndData(req.params.id);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: "Delete failed" });
+    }
+});
+app.get('/api/admin/users/:id/history', requireAuth, requireMod, async (req, res) => {
     try {
         const userId = req.params.id;
         const posts = await Post.find({ userId }).sort({ createdAt: -1 });
@@ -213,17 +309,42 @@ app.post('/api/admin/users/:id/action', requireAuth, requireAdmin, async (req, r
         targetUser.isTimedOut = false;
         targetUser.timeoutUntil = null;
     }
+    if (action === 'promote_mod') targetUser.isModerator = true;
+    if (action === 'demote_mod') targetUser.isModerator = false;
 
     await targetUser.save();
     res.json(targetUser);
 });
-app.get('/api/admin/reports', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/reports', requireAuth, requireMod, async (req, res) => {
     try {
         const reports = await Report.find().populate('reportedBy', '_id').sort({ createdAt: -1 }).lean();
-        res.json(reports);
-    } catch (e) { res.status(500).json({ error: "Error" }); }
+
+        // Enrich reports with content snapshot
+        const enrichedReports = await Promise.all(reports.map(async (r) => {
+            let contentSnapshot = "Content not found";
+
+            if (r.targetType === 'post') {
+                const post = await Post.findById(r.targetId, 'content');
+                if (post) contentSnapshot = post.content;
+            } else if (r.targetType === 'comment') {
+                const post = await Post.findOne({ "comments._id": r.targetId }, { "comments.$": 1 });
+                if (post && post.comments && post.comments[0]) {
+                    contentSnapshot = post.comments[0].content;
+                }
+            } else if (r.targetType === 'chat') {
+                contentSnapshot = "Encrypted/Ephemeral Chat Session";
+            }
+
+            return { ...r, contentSnapshot };
+        }));
+
+        res.json(enrichedReports);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Error fetching reports" });
+    }
 });
-app.post('/api/admin/reports/:id/resolve', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/reports/:id/resolve', requireAuth, requireMod, async (req, res) => {
     await Report.findByIdAndDelete(req.params.id);
     res.json({ success: true });
 });
@@ -267,15 +388,22 @@ app.get('/api/my-posts', requireAuth, async (req, res) => {
 });
 
 app.delete('/api/posts/:id', requireAuth, async (req, res) => {
-    const query = req.user.isAdmin ? { _id: req.params.id } : { _id: req.params.id, userId: req.user._id };
+    // Mods can delete, Admins can delete, Owners can delete
+    let query;
+    if (req.user.isAdmin || req.user.isModerator) {
+        query = { _id: req.params.id };
+    } else {
+        query = { _id: req.params.id, userId: req.user._id };
+    }
+
     const post = await Post.findOneAndDelete(query);
-    if (!post) return res.status(404).json({ error: "Not found" });
+    if (!post) return res.status(404).json({ error: "Not found or authorized" });
     io.emit('remove_post', { postId: post._id });
     res.json({ success: true });
 });
 
 app.put('/api/posts/:id', requireAuth, async (req, res) => {
-    const cleanedContent = filter.clean(req.body.content.trim());
+    const cleanedContent = safeClean(req.body.content.trim());
     const post = await Post.findOneAndUpdate({ _id: req.params.id, userId: req.user._id }, { content: cleanedContent }, { new: true });
     io.emit('update_post', post);
     res.json(post);
@@ -286,10 +414,10 @@ app.post('/api/posts', requireAuth, async (req, res) => {
     if (!content || content.trim().length === 0) return res.status(400).json({ error: 'Empty content.' });
 
     try {
-        const cleanedContent = filter.clean(content.trim());
+        const cleanedContent = safeClean(content.trim());
         let processedPollOptions = [];
         if (type === 'poll' && Array.isArray(pollOptions)) {
-            processedPollOptions = pollOptions.map(opt => ({ text: filter.clean(opt.text), votes: [] }));
+            processedPollOptions = pollOptions.map(opt => ({ text: safeClean(opt.text), votes: [] }));
         }
 
         const post = new Post({
@@ -338,28 +466,32 @@ app.post('/api/posts/:postId/reaction', requireAuth, async (req, res) => {
         const post = await Post.findById(postId);
         if (!post) return res.status(404).json({ error: 'Post not found' });
 
+        // Check using string comparison for accurate existing check
+        const hasLiked = post.likedBy.some(id => id.toString() === userId.toString());
+        const hasDisliked = post.dislikedBy.some(id => id.toString() === userId.toString());
+
         let update = {};
 
         if (reactionType === 'like') {
-            if (post.likedBy.includes(userId)) {
+            if (hasLiked) {
                 // Unlike
                 update = { $inc: { likes: -1 }, $pull: { likedBy: userId } };
             } else {
                 // Like (and remove dislike if exists)
                 update = {
-                    $inc: { likes: 1, dislikes: post.dislikedBy.includes(userId) ? -1 : 0 },
+                    $inc: { likes: 1, dislikes: hasDisliked ? -1 : 0 },
                     $addToSet: { likedBy: userId },
                     $pull: { dislikedBy: userId }
                 };
             }
         } else if (reactionType === 'dislike') {
-            if (post.dislikedBy.includes(userId)) {
+            if (hasDisliked) {
                 // Undislike
                 update = { $inc: { dislikes: -1 }, $pull: { dislikedBy: userId } };
             } else {
                 // Dislike (and remove like if exists)
                 update = {
-                    $inc: { dislikes: 1, likes: post.likedBy.includes(userId) ? -1 : 0 },
+                    $inc: { dislikes: 1, likes: hasLiked ? -1 : 0 },
                     $addToSet: { dislikedBy: userId },
                     $pull: { likedBy: userId }
                 };
@@ -374,8 +506,8 @@ app.post('/api/posts/:postId/reaction', requireAuth, async (req, res) => {
 
         io.emit('update_post', updatedPost);
 
-        // Notify Author on Like
-        if (reactionType === 'like' && updatedPost.hasLiked) {
+        // Notify Author on Like (only if just liked and NOT self-like)
+        if (reactionType === 'like' && updatedPost.hasLiked && !post.userId.equals(userId)) {
             await createNotification(post.userId, 'like', post._id, { name: 'Someone', color: '#888' }, 'liked your post');
         }
 
@@ -392,7 +524,7 @@ app.post('/api/posts/:postId/comment', requireAuth, async (req, res) => {
     const userId = req.user._id;
 
     if (!content || !content.trim()) return res.status(400).json({ error: "Empty comment" });
-    const cleanedContent = filter.clean(content.trim());
+    const cleanedContent = safeClean(content.trim());
 
     try {
         const post = await Post.findById(postId);
@@ -431,9 +563,9 @@ app.post('/api/posts/:postId/comment', requireAuth, async (req, res) => {
                 { new: true }
             );
 
-            // Notify original commenter
+            // Notify original commenter if NOT self-reply
             const parentComment = post.comments.id(parentCommentId);
-            if (parentComment) {
+            if (parentComment && !parentComment.userId.equals(userId)) {
                 await createNotification(parentComment.userId, 'reply', postId, aliasToUse, 'replied to your comment');
             }
 
@@ -452,8 +584,10 @@ app.post('/api/posts/:postId/comment', requireAuth, async (req, res) => {
                 { new: true }
             );
 
-            // Notify Post Author
-            await createNotification(post.userId, 'comment', postId, aliasToUse, 'commented on your post');
+            // Notify Post Author if NOT self-comment
+            if (!post.userId.equals(userId)) {
+                await createNotification(post.userId, 'comment', postId, aliasToUse, 'commented on your post');
+            }
         }
 
         io.emit('update_post', updatedPost);
@@ -563,8 +697,8 @@ app.post('/api/chat/message', requireAuth, async (req, res) => {
     const { content } = req.body;
     if (!req.user.currentChatId) return res.status(400).json({ error: "No active chat" });
 
-    // Allow emojis, but filter bad words
-    const cleanedContent = filter.clean(content);
+    // Allow emojis, but filter bad words safely
+    const cleanedContent = safeClean(content);
 
     const message = new Message({
         chatId: req.user.currentChatId,

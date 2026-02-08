@@ -23,6 +23,7 @@ import { ToastProvider } from './contexts/ToastContext.jsx';
 import { SocketProvider } from './contexts/SocketContext.jsx';
 import { UserProvider, useUser } from './contexts/UserContext.jsx';
 import { ThemeProvider } from './contexts/ThemeContext.jsx';
+import { DialogProvider } from './contexts/DialogContext.jsx';
 import { apiFetch } from './api.js';
 import Header from './components/Header.jsx';
 import { playClickSound } from './utils/sound.js';
@@ -38,7 +39,7 @@ const FULL_WIDTH_ROUTES = [
 
 const AppLayout = () => {
   const location = useLocation();
-  const { isAdmin } = useUser();
+  const { isAdmin, isModerator } = useUser();
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
 
   // Check if the current route should be full width (no info panel)
@@ -80,7 +81,9 @@ const AppLayout = () => {
             <Route path='/about' element={<About />} />
             <Route path='/rules' element={<Rules />} />
             <Route path='/settings' element={<Settings />} />
-            {isAdmin && <Route path='/admin' element={<AdminDashboard />} />}
+            {(isAdmin || isModerator) && (
+              <Route path='/admin' element={<AdminDashboard />} />
+            )}
             <Route path='*' element={<Navigate to='/' />} />
           </Routes>
         </main>
@@ -127,15 +130,17 @@ const App = () => {
   return (
     <>
       <ThemeProvider>
-        <ToastProvider>
-          <SocketProvider>
-            <UserProvider>
-              <Router>
-                <AppContent />
-              </Router>
-            </UserProvider>
-          </SocketProvider>
-        </ToastProvider>
+        <DialogProvider>
+          <ToastProvider>
+            <SocketProvider>
+              <UserProvider>
+                <Router>
+                  <AppContent />
+                </Router>
+              </UserProvider>
+            </SocketProvider>
+          </ToastProvider>
+        </DialogProvider>
       </ThemeProvider>
     </>
   );
