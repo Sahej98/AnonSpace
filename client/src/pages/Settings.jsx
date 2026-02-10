@@ -454,11 +454,45 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* Feedback Modal */}
+            {/* Feedback Modal */}
       <AnimatePresence>
           {isFeedbackOpen && (
               <motion.div 
                   className="modal-overlay"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsFeedbackOpen(false)}
+                  style={{zIndex: 2000}}
+              >
+                  <motion.div 
+                      className="modal-content"
+                      initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                      animate={{ scale: 1, opacity: 1, y: 0 }}
+                      exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                      onClick={e => e.stopPropagation()}
+                      style={{maxWidth: '500px', padding: '1.5rem'}}
+                  >
+                      <h2 style={{fontSize: '1.3rem', fontWeight: 700, marginBottom: '1rem'}}>Send Feedback</h2>
+                      <textarea 
+                          className="styled-textarea" 
+                          placeholder="Describe the bug or share your ideas..."
+                          value={feedbackContent}
+                          onChange={e => setFeedbackContent(e.target.value)}
+                          style={{height: '150px', marginBottom: '1.5rem'}}
+                      />
+                      <div style={{display: 'flex', gap: '1rem', justifyContent: 'flex-end'}}>
+                          <button className="cancel-button" onClick={() => setIsFeedbackOpen(false)}>Cancel</button>
+                          <button className="submit-button" onClick={handleSubmitFeedback} disabled={!feedbackContent.trim()}>Submit</button>
+                      </div>
+                  </motion.div>
+              </motion.div>
+          )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default Settings;
+
   
