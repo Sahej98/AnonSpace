@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Shield,
   Skull,
+  Bug,
 } from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
 import { useDialog } from '../hooks/useDialog.js';
@@ -22,6 +23,7 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState(isAdmin ? 'users' : 'reports');
   const [users, setUsers] = useState([]);
   const [reports, setReports] = useState([]);
+  const [feedback, setFeedback] = useState([]);
   const [stats, setStats] = useState({
     userCount: 0,
     postCount: 0,
@@ -40,6 +42,7 @@ const AdminDashboard = () => {
     fetchStats();
     if (activeTab === 'users' && !selectedUser && isAdmin) fetchUsers();
     if (activeTab === 'reports') fetchReports();
+    if (activeTab === 'feedback') fetchFeedback();
   }, [activeTab, selectedUser, isAdmin]);
 
   const fetchStats = async () => {
@@ -60,6 +63,13 @@ const AdminDashboard = () => {
     try {
       const res = await apiFetch('/api/admin/reports');
       if (res.ok) setReports(await res.json());
+    } catch (e) {}
+  };
+
+  const fetchFeedback = async () => {
+    try {
+      const res = await apiFetch('/api/admin/feedback');
+      if (res.ok) setFeedback(await res.json());
     } catch (e) {}
   };
 
@@ -166,6 +176,16 @@ const AdminDashboard = () => {
       }
     } else {
       addToast('Deletion only supported for posts currently', 'info');
+    }
+  };
+
+  const handleDeleteFeedback = async (id) => {
+    try {
+      await apiFetch(`/api/admin/feedback/${id}/delete`, { method: 'POST' });
+      setFeedback((prev) => prev.filter((f) => f._id !== id));
+      addToast('Feedback deleted', 'success');
+    } catch (e) {
+      addToast('Failed to delete', 'error');
     }
   };
 
@@ -384,7 +404,11 @@ const AdminDashboard = () => {
                         <Trash2 size={16} />
                       </button>
                     </div>
-                    <p style={{ marginTop: '0.5rem' }}>{post.content}</p>
+                    <p
+                      style={{ marginTop: '0.5rem' }}
+                      className='formatted-content'>
+                      {post.content}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -419,7 +443,7 @@ const AdminDashboard = () => {
                       }}>
                       On Post: {comment.postContent?.substring(0, 30)}...
                     </div>
-                    <p>{comment.content}</p>
+                    <p className='formatted-content'>{comment.content}</p>
                   </div>
                 ))}
               </div>
@@ -481,7 +505,7 @@ const AdminDashboard = () => {
               borderRadius: 0,
             }}>
             <Users size={18} />
-            <span>User Management</span>
+            <span>Users</span>
           </button>
         )}
         <button
@@ -494,7 +518,19 @@ const AdminDashboard = () => {
             borderRadius: 0,
           }}>
           <ShieldAlert size={18} />
-          <span>Report Management</span>
+          <span>Reports</span>
+        </button>
+        <button
+          className={`nav-item ${activeTab === 'feedback' ? 'active' : ''}`}
+          onClick={() => setActiveTab('feedback')}
+          style={{
+            padding: '0.5rem 1rem',
+            borderBottom:
+              activeTab === 'feedback' ? '2px solid var(--primary)' : 'none',
+            borderRadius: 0,
+          }}>
+          <Bug size={18} />
+          <span>Feedback</span>
         </button>
       </div>
 
@@ -602,7 +638,8 @@ const AdminDashboard = () => {
                     fontSize: '0.9rem',
                     fontStyle: 'italic',
                     color: 'var(--text-main)',
-                  }}>
+                  }}
+                  className='formatted-content'>
                   "{r.contentSnapshot}"
                 </p>
                 <p
@@ -635,6 +672,50 @@ const AdminDashboard = () => {
                     handleDeleteContent(r.targetType, r.targetId, r._id)
                   }>
                   <Trash2 size={16} /> Delete Content
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'feedback' && (
+        <div
+          className='feedback-list'
+          style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {feedback.length === 0 && (
+            <p className='muted-text'>No feedback received.</p>
+          )}
+          {feedback.map((f) => (
+            <div key={f._id} className='card' style={{ padding: '1rem' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: '0.5rem',
+                }}>
+                <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                  FEEDBACK / BUG
+                </span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                  {new Date(f.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+              <p className='formatted-content' style={{ marginBottom: '1rem' }}>
+                {f.content}
+              </p>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  borderTop: '1px solid var(--glass-border)',
+                  paddingTop: '0.5rem',
+                }}>
+                <button
+                  className='icon-button'
+                  onClick={() => handleDeleteFeedback(f._id)}
+                  style={{ color: 'var(--accent-red)' }}>
+                  <Trash2 size={18} />
                 </button>
               </div>
             </div>

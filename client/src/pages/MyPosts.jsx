@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../api.js';
-import { Edit2, Trash2, Archive, LoaderCircle } from 'lucide-react';
+import { Edit2, Trash2, Archive } from 'lucide-react';
 import { useToast } from '../hooks/useToast.js';
 import { useDialog } from '../hooks/useDialog.js';
 import { motion, AnimatePresence } from 'framer-motion';
+import SkeletonCard from '../components/SkeletonCard.jsx';
 
 const MyPosts = () => {
   const [posts, setPosts] = useState([]);
@@ -70,8 +71,15 @@ const MyPosts = () => {
 
   if (loading)
     return (
-      <div className='loader-wrapper'>
-        <LoaderCircle className='styled-loader' size={32} />
+      <div className='centered-page-container full-width'>
+        <h1 className='feed-header-title' style={{ marginBottom: '1.5rem' }}>
+          My Activity
+        </h1>
+        <div className='post-list-wrapper'>
+          {[...Array(3)].map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
       </div>
     );
 
@@ -169,6 +177,7 @@ const MyPosts = () => {
                         </div>
                       </div>
                       <div
+                        className='formatted-content'
                         style={{
                           padding: '1.25rem',
                           color: 'var(--text-main)',

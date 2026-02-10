@@ -18,6 +18,8 @@ const Report = require('./models/Report');
 const Chat = require('./models/Chat');
 const Message = require('./models/Message');
 const Notification = require('./models/Notification');
+const Feedback = require('./models/Feedback');
+const Changelog = require('./models/Changelog');
 
 // Connect to Database
 connectDB();
@@ -147,7 +149,6 @@ const deleteUserAndData = async (userId) => {
     });
 
     // 7. Remove comments by User from all Posts (Deep Clean)
-    // First, find posts that have comments by this user
     const postsWithComments = await Post.find({ "comments.userId": uid });
     for (const p of postsWithComments) {
         p.comments = p.comments.filter(c => !c.userId.equals(uid));
@@ -155,7 +156,6 @@ const deleteUserAndData = async (userId) => {
     }
 
     // 8. Remove replies by User from all Posts (Deep Clean)
-    // Find posts that have replies by this user
     const postsWithReplies = await Post.find({ "comments.replies.userId": uid });
     for (const p of postsWithReplies) {
         p.comments.forEach(c => {
@@ -216,6 +216,70 @@ app.delete('/api/user/me', requireAuth, async (req, res) => {
     } catch (e) {
         console.error(e);
         res.status(500).json({ error: "Failed to delete account" });
+    }
+});
+
+// --- Feedback & Changelog Endpoints ---
+
+app.post('/api/feedback', requireAuth, async (req, res) => {
+    const { content, type } = req.body;
+    try {
+        const feedback = new Feedback({
+            userId: req.user._id,
+            content,
+            type: type || 'feedback'
+        });
+        await feedback.save();
+        res.status(201).json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: "Failed to submit" });
+    }
+});
+
+app.get('/api/admin/feedback', requireAuth, requireMod, async (req, res) => {
+    try {
+        const feedbacks = await Feedback.find().sort({ createdAt: -1 });
+        res.json(feedbacks);
+    } catch (e) {
+        res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+});
+
+app.post('/api/admin/feedback/:id/delete', requireAuth, requireMod, async (req, res) => {
+    try {
+        await Feedback.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: "Failed to delete" });
+    }
+});
+
+app.get('/api/changelog', async (req, res) => {
+    try {
+        const logs = await Changelog.find().sort({ date: -1 });
+        res.json(logs);
+    } catch (e) {
+        res.status(500).json({ error: "Failed to fetch logs" });
+    }
+});
+
+app.post('/api/admin/changelog', requireAuth, requireAdmin, async (req, res) => {
+    const { version, content } = req.body;
+    try {
+        const log = new Changelog({ version, content });
+        await log.save();
+        res.json(log);
+    } catch (e) {
+        res.status(500).json({ error: "Failed to create log" });
+    }
+});
+
+app.delete('/api/admin/changelog/:id', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        await Changelog.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: "Failed to delete log" });
     }
 });
 

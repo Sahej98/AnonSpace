@@ -1,709 +1,956 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../contexts/ThemeContext.jsx';
-import { useUser } from '../contexts/UserContext.jsx';
-import { useToast } from '../hooks/useToast.js';
-import { useDialog } from '../hooks/useDialog.js';
-import { apiFetch } from '../api.js';
-import {
-  Bell,
-  LogOut,
-  Copy,
-  BookOpen,
-  Info,
-  ChevronRight,
-  Eye,
-  Moon,
-  Sun,
-  Type,
-  Volume2,
-  Trash2,
-} from 'lucide-react';
+require('dotenv').config();
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const mongoose = require('mongoose');
+const rateLimit = require('express-rate-limit');
+const Filter = require('bad-words');
+const { generateUsername } = require('./utils/usernameGenerator');
+const connectDB = require('./db');
+const path = require('path');
 
-const DARK_THEMES = [
-  { id: 'dark', name: 'Midnight', colors: ['#050507', '#6366f1'] },
-  { id: 'abyss', name: 'Abyss', colors: ['#000000', '#3e3e9e'] },
-  { id: 'high-contrast', name: 'Hi-Contrast', colors: ['#000000', '#ffff00'] },
-  { id: 'cyberpunk', name: 'Cyberpunk', colors: ['#050014', '#ff00dd'] },
-  { id: 'dracula', name: 'Dracula', colors: ['#282a36', '#bd93f9'] },
-  { id: 'monokai', name: 'Monokai', colors: ['#272822', '#a6e22e'] },
-  { id: 'nord', name: 'Nord', colors: ['#2e3440', '#88c0d0'] },
-  { id: 'solarized-dark', name: 'Solar. Dark', colors: ['#002b36', '#2aa198'] },
-  { id: 'ocean', name: 'Ocean', colors: ['#0f172a', '#38bdf8'] },
-  { id: 'forest', name: 'Forest', colors: ['#1a2f1a', '#4ade80'] },
-  { id: 'sunset', name: 'Sunset', colors: ['#2a1b1b', '#fb923c'] },
-  { id: 'coffee', name: 'Coffee', colors: ['#2c241b', '#d4a373'] },
-  { id: 'terminal', name: 'Terminal', colors: ['#000000', '#00ff00'] },
-  { id: 'slate', name: 'Slate', colors: ['#1e293b', '#94a3b8'] },
-  { id: 'navy', name: 'Navy', colors: ['#0a192f', '#64ffda'] },
-  { id: 'maroon', name: 'Maroon', colors: ['#2b0a0a', '#dc2626'] },
-  { id: 'gold', name: 'Gold', colors: ['#1c1905', '#eab308'] },
-  { id: 'ultraviolet', name: 'Ultraviolet', colors: ['#1a0b2e', '#7c3aed'] },
-  { id: 'synthwave', name: 'Synthwave', colors: ['#2b213a', '#01cdfe'] },
-  { id: 'matrix', name: 'Matrix', colors: ['#0d0208', '#00ff41'] },
-  { id: 'fire', name: 'Fire', colors: ['#1a0500', '#ff4500'] },
-  { id: 'earth', name: 'Earth', colors: ['#1c1815', '#a8a29e'] },
-  { id: 'deep-space', name: 'Deep Space', colors: ['#000000', '#3f51b5'] },
-  { id: 'void', name: 'Void', colors: ['#000000', '#ffffff'] },
-];
+// DB Models
+const User = require('./models/User');
+const Post = require('./models/Post');
+const Report = require('./models/Report');
+const Chat = require('./models/Chat');
+const Message = require('./models/Message');
+const Notification = require('./models/Notification');
+const Feedback = require('./models/Feedback');
+const Changelog = require('./models/Changelog');
 
-const LIGHT_THEMES = [
-  { id: 'light', name: 'Daylight', colors: ['#f8fafc', '#4f46e5'] },
-  { id: 'pastel', name: 'Pastel', colors: ['#fff0f5', '#f472b6'] },
-  {
-    id: 'solarized-light',
-    name: 'Solar. Light',
-    colors: ['#fdf6e3', '#268bd2'],
+// Connect to Database
+connectDB();
+
+const app = express();
+const server = http.createServer(app);
+
+// Use CLIENT_URL for production (Vercel), fallback to localhost for dev
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
+const io = new Server(server, {
+  cors: {
+    origin: CLIENT_URL,
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
-  { id: 'lavender', name: 'Lavender', colors: ['#f3e8ff', '#a855f7'] },
-  { id: 'mint', name: 'Mint', colors: ['#f0fdf4', '#22c55e'] },
-  { id: 'rose', name: 'Rose', colors: ['#fff1f2', '#e11d48'] },
-  { id: 'sky', name: 'Sky', colors: ['#f0f9ff', '#0284c7'] },
-  { id: 'olive', name: 'Olive', colors: ['#f7fee7', '#65a30d'] },
-  { id: 'lemon', name: 'Lemon', colors: ['#fef9c3', '#ca8a04'] },
-  { id: 'peach', name: 'Peach', colors: ['#fff7ed', '#f97316'] },
-  { id: 'lilac', name: 'Lilac', colors: ['#f5f3ff', '#8b5cf6'] },
-  { id: 'cream', name: 'Cream', colors: ['#fffbeb', '#d97706'] },
-  { id: 'paper', name: 'Paper', colors: ['#f5f5f4', '#57534e'] },
-  { id: 'latte', name: 'Latte', colors: ['#fdfbf7', '#8d6e63'] },
-  { id: 'blossom', name: 'Blossom', colors: ['#fff0f5', '#db2777'] },
-  { id: 'arctic', name: 'Arctic', colors: ['#f0f8ff', '#0077be'] },
-  { id: 'sand', name: 'Sand', colors: ['#fdf5e6', '#8d6e63'] },
-  { id: 'ice', name: 'Ice', colors: ['#f0ffff', '#00acc1'] },
-  { id: 'cloud', name: 'Cloud', colors: ['#f8f9fa', '#adb5bd'] },
-  { id: 'ivory', name: 'Ivory', colors: ['#fffff0', '#795548'] },
-  { id: 'linen', name: 'Linen', colors: ['#fbf5ef', '#bcaaa4'] },
-  { id: 'porcelain', name: 'Porcelain', colors: ['#f8fafc', '#64748b'] },
-  { id: 'lace', name: 'Lace', colors: ['#fdfbf7', '#d6d3d1'] },
-  { id: 'daisy', name: 'Daisy', colors: ['#fffff0', '#eab308'] },
-];
+});
 
-const FONTS = [
-  { id: 'inter', name: 'Inter' },
-  { id: 'roboto', name: 'Roboto' },
-  { id: 'opensans', name: 'Open Sans' },
-  { id: 'lato', name: 'Lato' },
-  { id: 'montserrat', name: 'Montserrat' },
-  { id: 'poppins', name: 'Poppins' },
-  { id: 'raleway', name: 'Raleway' },
-  { id: 'nunito', name: 'Nunito' },
-  { id: 'ubuntu', name: 'Ubuntu' },
-  { id: 'playfair', name: 'Playfair Display' },
-  { id: 'lora', name: 'Lora' },
-  { id: 'ptserif', name: 'PT Serif' },
-  { id: 'robotoslab', name: 'Roboto Slab' },
-  { id: 'quicksand', name: 'Quicksand' },
-  { id: 'inconsolata', name: 'Inconsolata' },
-  { id: 'oswald', name: 'Oswald' },
-  { id: 'pacifico', name: 'Pacifico' },
-  { id: 'dancing', name: 'Dancing Script' },
-  { id: 'vt323', name: 'VT323' },
-  { id: 'pressstart', name: 'Press Start 2P' },
-  { id: 'merriweather', name: 'Merriweather' },
-  { id: 'indie-flower', name: 'Indie Flower' },
-  { id: 'fira-code', name: 'Fira Code' },
-  { id: 'system', name: 'System UI' },
-];
-
-const ThemeCard = ({ name, value, colors, current, onClick }) => {
-  const isSelected = current === value;
-  return (
-    <div
-      onClick={() => onClick(value)}
-      style={{
-        border: isSelected
-          ? '2px solid var(--primary)'
-          : '1px solid var(--glass-border)',
-        borderRadius: '12px',
-        padding: '0.8rem',
-        cursor: 'pointer',
-        background: 'var(--bg-surface)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '0.5rem',
-        transition: 'all 0.2s',
-        opacity: isSelected ? 1 : 0.7,
-      }}>
-      <div className='theme-preview-colors'>
-        <div className='theme-preview-dot' style={{ background: colors[0] }} />
-        <div className='theme-preview-dot' style={{ background: colors[1] }} />
-      </div>
-      <span
-        style={{
-          fontSize: '0.8rem',
-          fontWeight: isSelected ? 600 : 400,
-          textAlign: 'center',
-          width: '100%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-        {name}
-      </span>
-    </div>
-  );
+const filter = new Filter();
+// Safe clean function to prevent crashes on emoji-only strings
+const safeClean = (text) => {
+  try {
+    if (!text || !text.trim()) return '';
+    return filter.clean(text);
+  } catch (e) {
+    // If filter fails (e.g. on pure emojis), return original text
+    return text;
+  }
 };
 
-const FontCard = ({ name, value, current, onClick }) => {
-  const isSelected = current === value;
-  let fontFamily = 'inherit';
-  switch (value) {
-    case 'inter':
-      fontFamily = "'Inter', sans-serif";
-      break;
-    case 'roboto':
-      fontFamily = "'Roboto', sans-serif";
-      break;
-    case 'opensans':
-      fontFamily = "'Open Sans', sans-serif";
-      break;
-    case 'lato':
-      fontFamily = "'Lato', sans-serif";
-      break;
-    case 'montserrat':
-      fontFamily = "'Montserrat', sans-serif";
-      break;
-    case 'poppins':
-      fontFamily = "'Poppins', sans-serif";
-      break;
-    case 'raleway':
-      fontFamily = "'Raleway', sans-serif";
-      break;
-    case 'nunito':
-      fontFamily = "'Nunito', sans-serif";
-      break;
-    case 'ubuntu':
-      fontFamily = "'Ubuntu', sans-serif";
-      break;
-    case 'playfair':
-      fontFamily = "'Playfair Display', serif";
-      break;
-    case 'lora':
-      fontFamily = "'Lora', serif";
-      break;
-    case 'ptserif':
-      fontFamily = "'PT Serif', serif";
-      break;
-    case 'robotoslab':
-      fontFamily = "'Roboto Slab', serif";
-      break;
-    case 'quicksand':
-      fontFamily = "'Quicksand', sans-serif";
-      break;
-    case 'inconsolata':
-      fontFamily = "'Inconsolata', monospace";
-      break;
-    case 'oswald':
-      fontFamily = "'Oswald', sans-serif";
-      break;
-    case 'pacifico':
-      fontFamily = "'Pacifico', cursive";
-      break;
-    case 'dancing':
-      fontFamily = "'Dancing Script', cursive";
-      break;
-    case 'vt323':
-      fontFamily = "'VT323', monospace";
-      break;
-    case 'pressstart':
-      fontFamily = "'Press Start 2P', cursive";
-      break;
-    case 'merriweather':
-      fontFamily = "'Merriweather', serif";
-      break;
-    case 'indie-flower':
-      fontFamily = "'Indie Flower', cursive";
-      break;
-    case 'fira-code':
-      fontFamily = "'Fira Code', monospace";
-      break;
-    case 'system':
-      fontFamily = 'system-ui, -apple-system, sans-serif';
-      break;
+const PORT = process.env.PORT || 3001;
+const ADMIN_ID = '111111111111111111111111'; // Hardcoded Admin ID
+
+app.use(cors({ origin: CLIENT_URL, credentials: true }));
+app.use(express.json());
+
+// --- Middleware ---
+const attachUser = async (req, res, next) => {
+  const userId = req.headers['x-user-id'];
+  if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+    try {
+      const user = await User.findById(userId);
+      if (user) {
+        // Check timeout
+        if (
+          user.isTimedOut &&
+          user.timeoutUntil &&
+          new Date() < user.timeoutUntil
+        ) {
+          // User is in timeout
+        } else if (
+          user.isTimedOut &&
+          user.timeoutUntil &&
+          new Date() >= user.timeoutUntil
+        ) {
+          user.isTimedOut = false;
+          user.timeoutUntil = null;
+          await user.save();
+        }
+
+        user.lastActive = new Date();
+        await user.save();
+        req.user = user;
+      }
+    } catch (error) {
+      console.warn('Error looking up user:', error.message);
+    }
+  }
+  next();
+};
+
+app.use(attachUser);
+
+const requireAuth = (req, res, next) => {
+  if (!req.user)
+    return res.status(401).json({ error: 'Unauthorized. Please login.' });
+  if (req.user.isBanned)
+    return res.status(403).json({ error: 'Account suspended.' });
+  if (req.user.isTimedOut)
+    return res
+      .status(403)
+      .json({
+        error: `You are timed out until ${new Date(req.user.timeoutUntil).toLocaleString()}`,
+      });
+  next();
+};
+
+const requireAdmin = (req, res, next) => {
+  if (!req.user || !req.user.isAdmin)
+    return res.status(403).json({ error: 'Admin access required.' });
+  next();
+};
+
+const requireMod = (req, res, next) => {
+  if (!req.user || (!req.user.isAdmin && !req.user.isModerator))
+    return res.status(403).json({ error: 'Moderator access required.' });
+  next();
+};
+
+// --- Helpers ---
+const createNotification = async (
+  recipientId,
+  type,
+  targetId,
+  senderAlias,
+  text,
+) => {
+  // Redundant check, but safe
+  if (recipientId.toString() === senderAlias.userId?.toString()) return;
+
+  try {
+    const notif = new Notification({
+      recipient: recipientId,
+      type,
+      targetId,
+      senderAlias: { name: senderAlias.name, color: senderAlias.color },
+      text,
+    });
+    await notif.save();
+    io.to(recipientId.toString()).emit('new_notification', notif);
+  } catch (e) {
+    console.error('Notif error', e);
+  }
+};
+
+const deleteUserAndData = async (userId) => {
+  const uid = new mongoose.Types.ObjectId(userId);
+
+  // 1. Delete User Account
+  await User.findByIdAndDelete(uid);
+
+  // 2. Delete Posts created by User
+  await Post.deleteMany({ userId: uid });
+
+  // 3. Delete Notifications received by User
+  await Notification.deleteMany({ recipient: uid });
+
+  // 4. Delete Reports made by User
+  await Report.deleteMany({ reportedBy: uid });
+
+  // 5. Delete Messages sent by User
+  await Message.deleteMany({ senderId: uid });
+
+  // 6. Update Likes: Remove ID from 'likedBy' AND decrement 'likes' count
+  await Post.updateMany(
+    { likedBy: uid },
+    {
+      $pull: { likedBy: uid },
+      $inc: { likes: -1 },
+    },
+  );
+
+  // 7. Update Dislikes: Remove ID from 'dislikedBy' AND decrement 'dislikes' count
+  await Post.updateMany(
+    { dislikedBy: uid },
+    {
+      $pull: { dislikedBy: uid },
+      $inc: { dislikes: -1 },
+    },
+  );
+
+  // 8. Remove comments made by User from ALL Posts
+  await Post.updateMany({}, { $pull: { comments: { userId: uid } } });
+
+  // 9. Remove replies made by User from ALL nested comments in ALL Posts
+  await Post.updateMany(
+    {},
+    { $pull: { 'comments.$[].replies': { userId: uid } } },
+  );
+
+  // 10. Close/Leave active Chats
+  const chats = await Chat.find({ participants: uid });
+  for (const chat of chats) {
+    chat.isActive = false;
+    await chat.save();
+    chat.participants.forEach((pId) => {
+      io.to(pId.toString()).emit('chat_ended');
+    });
+  }
+};
+
+// --- Auth Endpoints ---
+
+app.post('/api/auth/login', async (req, res) => {
+  const { userId } = req.body;
+
+  try {
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({ error: 'Invalid ID format' });
+      }
+      let user = await User.findById(userId);
+      if (!user) {
+        if (userId === ADMIN_ID) {
+          user = new User({ _id: userId, isAdmin: true, acceptedTOS: true });
+          await user.save();
+        } else {
+          return res.status(404).json({ error: 'User ID not found' });
+        }
+      }
+      return res.json(user);
+    } else {
+      const user = new User({ acceptedTOS: true });
+      await user.save();
+      return res.status(201).json(user);
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Auth error' });
+  }
+});
+
+app.delete('/api/user/me', requireAuth, async (req, res) => {
+  try {
+    if (req.user.isAdmin)
+      return res.status(400).json({ error: 'Admin cannot delete self.' });
+    await deleteUserAndData(req.user._id);
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
+// --- Feedback & Changelog Endpoints ---
+
+app.post('/api/feedback', requireAuth, async (req, res) => {
+  const { content, type } = req.body;
+  try {
+    const feedback = new Feedback({
+      userId: req.user._id,
+      content,
+      type: type || 'feedback',
+    });
+    await feedback.save();
+    res.status(201).json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to submit' });
+  }
+});
+
+app.get('/api/admin/feedback', requireAuth, requireMod, async (req, res) => {
+  try {
+    const feedbacks = await Feedback.find().sort({ createdAt: -1 });
+    res.json(feedbacks);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch feedback' });
+  }
+});
+
+app.post(
+  '/api/admin/feedback/:id/delete',
+  requireAuth,
+  requireMod,
+  async (req, res) => {
+    try {
+      await Feedback.findByIdAndDelete(req.params.id);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to delete' });
+    }
+  },
+);
+
+app.get('/api/changelog', async (req, res) => {
+  try {
+    const logs = await Changelog.find().sort({ date: -1 });
+    res.json(logs);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
+app.post(
+  '/api/admin/changelog',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const { version, content } = req.body;
+    try {
+      const log = new Changelog({ version, content });
+      await log.save();
+      res.json(log);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to create log' });
+    }
+  },
+);
+
+app.delete(
+  '/api/admin/changelog/:id',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      await Changelog.findByIdAndDelete(req.params.id);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to delete log' });
+    }
+  },
+);
+
+// --- Notification Endpoints ---
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    const notifications = await Notification.find({ recipient: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(20);
+    res.json(notifications);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+app.post('/api/notifications/:id/read', requireAuth, async (req, res) => {
+  try {
+    await Notification.findByIdAndUpdate(req.params.id, { read: true });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to read' });
+  }
+});
+
+app.post('/api/notifications/read-all', requireAuth, async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { recipient: req.user._id, read: false },
+      { read: true },
+    );
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// --- Admin Endpoints ---
+app.get('/api/admin/stats', requireAuth, requireMod, async (req, res) => {
+  const userCount = await User.countDocuments();
+  const postCount = await Post.countDocuments();
+  const reportCount = await Report.countDocuments();
+  res.json({ userCount, postCount, reportCount });
+});
+app.get('/api/admin/users', requireAuth, requireMod, async (req, res) => {
+  const users = await User.find().sort({ createdAt: -1 }).limit(50);
+  res.json(users);
+});
+app.delete(
+  '/api/admin/users/:id',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      if (req.params.id === req.user._id.toString()) {
+        return res.status(400).json({ error: 'Cannot delete self' });
+      }
+      await deleteUserAndData(req.params.id);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Delete failed' });
+    }
+  },
+);
+app.get(
+  '/api/admin/users/:id/history',
+  requireAuth,
+  requireMod,
+  async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const posts = await Post.find({ userId }).sort({ createdAt: -1 });
+      const comments = await Post.aggregate([
+        { $unwind: '$comments' },
+        { $match: { 'comments.userId': new mongoose.Types.ObjectId(userId) } },
+        {
+          $project: {
+            _id: '$comments._id',
+            content: '$comments.content',
+            createdAt: '$comments.createdAt',
+            postId: '$_id',
+            postContent: '$content',
+          },
+        },
+        { $sort: { createdAt: -1 } },
+      ]);
+      res.json({ posts, comments });
+    } catch (e) {
+      res.status(500).json({ error: 'Fetch history failed' });
+    }
+  },
+);
+app.post(
+  '/api/admin/users/:id/action',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const { action } = req.body;
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) return res.status(404).json({ error: 'User not found' });
+
+    if (action === 'ban') targetUser.isBanned = true;
+    if (action === 'unban') targetUser.isBanned = false;
+    if (action === 'timeout') {
+      targetUser.isTimedOut = true;
+      targetUser.timeoutUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    }
+    if (action === 'remove_timeout') {
+      targetUser.isTimedOut = false;
+      targetUser.timeoutUntil = null;
+    }
+    if (action === 'promote_mod') targetUser.isModerator = true;
+    if (action === 'demote_mod') targetUser.isModerator = false;
+
+    await targetUser.save();
+    res.json(targetUser);
+  },
+);
+app.get('/api/admin/reports', requireAuth, requireMod, async (req, res) => {
+  try {
+    const reports = await Report.find()
+      .populate('reportedBy', '_id')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Enrich reports with content snapshot
+    const enrichedReports = await Promise.all(
+      reports.map(async (r) => {
+        let contentSnapshot = 'Content not found';
+
+        if (r.targetType === 'post') {
+          const post = await Post.findById(r.targetId, 'content');
+          if (post) contentSnapshot = post.content;
+        } else if (r.targetType === 'comment') {
+          const post = await Post.findOne(
+            { 'comments._id': r.targetId },
+            { 'comments.$': 1 },
+          );
+          if (post && post.comments && post.comments[0]) {
+            contentSnapshot = post.comments[0].content;
+          }
+        } else if (r.targetType === 'chat') {
+          contentSnapshot = 'Encrypted/Ephemeral Chat Session';
+        }
+
+        return { ...r, contentSnapshot };
+      }),
+    );
+
+    res.json(enrichedReports);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error fetching reports' });
+  }
+});
+app.post(
+  '/api/admin/reports/:id/resolve',
+  requireAuth,
+  requireMod,
+  async (req, res) => {
+    await Report.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  },
+);
+
+// --- Post Endpoints ---
+
+app.get('/api/posts', async (req, res) => {
+  const { sort = 'newest', tag, offset = 0, limit = 10 } = req.query;
+  const parsedOffset = parseInt(offset);
+  const parsedLimit = parseInt(limit);
+
+  try {
+    let query = { isHidden: false };
+    if (tag) query.tags = `#${tag}`;
+
+    let sortQuery = {};
+    if (sort === 'newest') sortQuery.createdAt = -1;
+    else if (sort === 'hot' || sort === 'top') sortQuery.likes = -1;
+
+    let posts = await Post.find(query)
+      .sort(sortQuery)
+      .limit(parsedLimit + parsedOffset)
+      .lean();
+
+    const userId = req.headers['x-user-id'];
+    if (userId) {
+      posts = posts.map((p) => ({
+        ...p,
+        hasLiked: p.likedBy && p.likedBy.some((id) => id.toString() === userId),
+        hasDisliked:
+          p.dislikedBy && p.dislikedBy.some((id) => id.toString() === userId),
+      }));
+    }
+
+    const paginatedPosts = posts.slice(
+      parsedOffset,
+      parsedOffset + parsedLimit,
+    );
+    res.json({
+      posts: paginatedPosts,
+      hasMore: posts.length > parsedOffset + parsedLimit,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch posts' });
+  }
+});
+
+app.get('/api/my-posts', requireAuth, async (req, res) => {
+  const posts = await Post.find({ userId: req.user._id, isHidden: false }).sort(
+    { createdAt: -1 },
+  );
+  res.json(posts);
+});
+
+app.delete('/api/posts/:id', requireAuth, async (req, res) => {
+  // Mods can delete, Admins can delete, Owners can delete
+  let query;
+  if (req.user.isAdmin || req.user.isModerator) {
+    query = { _id: req.params.id };
+  } else {
+    query = { _id: req.params.id, userId: req.user._id };
   }
 
-  return (
-    <div
-      onClick={() => onClick(value)}
-      style={{
-        border: isSelected
-          ? '2px solid var(--primary)'
-          : '1px solid var(--glass-border)',
-        borderRadius: '12px',
-        padding: '0.8rem',
-        cursor: 'pointer',
-        background: 'var(--bg-surface)',
-        textAlign: 'center',
-        transition: 'all 0.2s',
-        opacity: isSelected ? 1 : 0.7,
-      }}>
-      <span style={{ fontSize: '1rem', fontFamily: fontFamily }}>Aa</span>
-      <div
-        style={{
-          fontSize: '0.8rem',
-          marginTop: '0.2rem',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          fontFamily: fontFamily,
-        }}>
-        {name}
-      </div>
-    </div>
+  const post = await Post.findOneAndDelete(query);
+  if (!post) return res.status(404).json({ error: 'Not found or authorized' });
+  io.emit('remove_post', { postId: post._id });
+  res.json({ success: true });
+});
+
+app.put('/api/posts/:id', requireAuth, async (req, res) => {
+  const cleanedContent = safeClean(req.body.content.trim());
+  const post = await Post.findOneAndUpdate(
+    { _id: req.params.id, userId: req.user._id },
+    { content: cleanedContent },
+    { new: true },
   );
-};
+  io.emit('update_post', post);
+  res.json(post);
+});
 
-const SettingsItem = ({
-  icon: Icon,
-  title,
-  subtitle,
-  onClick,
-  isActive,
-  isToggle = true,
-  customAction,
-  showChevron = false,
-  className = '',
-}) => {
-  return (
-    <div
-      className={`feature-item ${className}`}
-      onClick={onClick}
-      style={{
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '1rem',
-        height: '100%',
-      }}>
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-        <div className='feature-icon' style={{ flexShrink: 0 }}>
-          <Icon size={20} color='var(--text-main)' />
-        </div>
-        <div className='feature-text' style={{ textAlign: 'left' }}>
-          <h3
-            style={{
-              fontSize: '0.95rem',
-              fontWeight: 600,
-              color: 'var(--text-main)',
-            }}>
-            {title}
-          </h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            {subtitle}
-          </p>
-        </div>
-      </div>
-      {customAction ? (
-        customAction
-      ) : isToggle ? (
-        <div className={`toggle-switch ${isActive ? 'active' : ''}`}>
-          <div className='toggle-thumb' />
-        </div>
-      ) : (
-        showChevron && <ChevronRight size={18} color='var(--text-muted)' />
-      )}
-    </div>
-  );
-};
+app.post('/api/posts', requireAuth, async (req, res) => {
+  const { content, tags, type, pollOptions } = req.body;
+  if (!content || content.trim().length === 0)
+    return res.status(400).json({ error: 'Empty content.' });
 
-const Settings = () => {
-  const { theme, font, fontSize, changeTheme, changeFont, changeFontSize } =
-    useTheme();
-  const { userId, logout } = useUser();
-  const [notifications, setNotifications] = useState(true);
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(
-    () => localStorage.getItem('anonSoundEnabled') !== 'false',
-  );
-
-  const addToast = useToast();
-  const dialog = useDialog();
-  const navigate = useNavigate();
-
-  const toggleSound = () => {
-    const newValue = !soundEnabled;
-    setSoundEnabled(newValue);
-    localStorage.setItem('anonSoundEnabled', newValue);
-  };
-
-  const handleCopyId = () => {
-    navigator.clipboard.writeText(userId);
-    addToast('User ID copied to clipboard.', 'success');
-  };
-
-  const handleLogout = async () => {
-    const confirmed = await dialog.confirm(
-      'Are you sure you want to sign out? You will need your User ID to log back in.',
-      { title: 'Sign Out' },
-    );
-    if (confirmed) {
-      logout();
+  try {
+    const cleanedContent = safeClean(content.trim());
+    let processedPollOptions = [];
+    if (type === 'poll' && Array.isArray(pollOptions)) {
+      processedPollOptions = pollOptions.map((opt) => ({
+        text: safeClean(opt.text),
+        votes: [],
+      }));
     }
-  };
 
-  const handleDeleteAccount = async () => {
-    const confirmed = await dialog.confirm(
-      'Permanently delete your account and ALL your posts, comments, and data? This action CANNOT be undone.',
-      {
-        title: 'Delete Account',
-        confirmText: 'DELETE EVERYTHING',
-        isDanger: true,
-      },
+    const post = new Post({
+      content: cleanedContent,
+      tags: tags || [],
+      userId: req.user._id,
+      alias: generateUsername(),
+      type: type === 'poll' ? 'poll' : 'text',
+      pollOptions: processedPollOptions,
+    });
+
+    const savedPost = await post.save();
+    io.emit('new_post', savedPost.toObject());
+    res.status(201).json(savedPost);
+  } catch (error) {
+    res.status(500).json({ error: 'Error creating post' });
+  }
+});
+
+app.post('/api/posts/:postId/vote', requireAuth, async (req, res) => {
+  const { postId } = req.params;
+  const { optionIndex } = req.body;
+  const userId = req.user._id;
+
+  try {
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+
+    const hasVoted = post.pollOptions.some((opt) => opt.votes.includes(userId));
+    if (hasVoted) return res.status(400).json({ error: 'Already voted' });
+
+    const updatedPost = await Post.findOneAndUpdate(
+      { _id: postId },
+      { $addToSet: { [`pollOptions.${optionIndex}.votes`]: userId } },
+      { new: true },
+    );
+    io.emit('update_post', updatedPost);
+    res.json({ success: true, post: updatedPost });
+  } catch (e) {
+    res.status(500).json({ error: 'Vote failed' });
+  }
+});
+
+app.post('/api/posts/:postId/reaction', requireAuth, async (req, res) => {
+  const { postId } = req.params;
+  const { reactionType } = req.body; // 'like' or 'dislike'
+  const userId = req.user._id;
+
+  try {
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+
+    // Check using string comparison for accurate existing check
+    const hasLiked = post.likedBy.some(
+      (id) => id.toString() === userId.toString(),
+    );
+    const hasDisliked = post.dislikedBy.some(
+      (id) => id.toString() === userId.toString(),
     );
 
-    if (!confirmed) return;
+    let update = {};
 
-    try {
-      const res = await apiFetch('/api/user/me', { method: 'DELETE' });
-      if (res.ok) {
-        addToast('Account deleted successfully.', 'success');
-        logout();
+    if (reactionType === 'like') {
+      if (hasLiked) {
+        // Unlike
+        update = { $inc: { likes: -1 }, $pull: { likedBy: userId } };
       } else {
-        throw new Error();
+        // Like (and remove dislike if exists)
+        update = {
+          $inc: { likes: 1, dislikes: hasDisliked ? -1 : 0 },
+          $addToSet: { likedBy: userId },
+          $pull: { dislikedBy: userId },
+        };
       }
-    } catch (e) {
-      addToast('Failed to delete account.', 'error');
+    } else if (reactionType === 'dislike') {
+      if (hasDisliked) {
+        // Undislike
+        update = { $inc: { dislikes: -1 }, $pull: { dislikedBy: userId } };
+      } else {
+        // Dislike (and remove like if exists)
+        update = {
+          $inc: { dislikes: 1, likes: hasLiked ? -1 : 0 },
+          $addToSet: { dislikedBy: userId },
+          $pull: { likedBy: userId },
+        };
+      }
     }
-  };
 
-  return (
-    <div className='centered-page-container full-width'>
-      <div
-        className='chat-page-wrapper active'
-        style={{
-          maxWidth: '900px',
-          margin: '0 auto',
-          overflowY: 'auto',
-        }}>
-        <div className='intro-section'>
-          <h1 className='chat-page-title'>Settings</h1>
-          <p className='chat-page-subtitle'>Customize your anonymity.</p>
-        </div>
+    const updatedPost = await Post.findByIdAndUpdate(postId, update, {
+      new: true,
+    }).lean();
 
-        <div className='settings-grid'>
-          {/* Account Info - Full Width */}
-          <div
-            className='feature-item full-span'
-            style={{
-              background: 'rgba(99, 102, 241, 0.1)',
-              borderColor: 'var(--primary)',
-              display: 'block',
-            }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '0.5rem',
-              }}>
-              <span
-                style={{
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  color: 'var(--primary)',
-                }}>
-                YOUR SECRET ID
-              </span>
-              <button onClick={handleCopyId}>
-                <Copy size={16} color='var(--primary)' />
-              </button>
-            </div>
-            <code
-              style={{
-                display: 'block',
-                wordBreak: 'break-all',
-                fontSize: '0.9rem',
-                fontFamily: 'monospace',
-              }}>
-              {userId}
-            </code>
-          </div>
+    // Populate flags for client
+    updatedPost.hasLiked = updatedPost.likedBy.some(
+      (id) => id.toString() === userId.toString(),
+    );
+    updatedPost.hasDisliked = updatedPost.dislikedBy.some(
+      (id) => id.toString() === userId.toString(),
+    );
 
-          {/* Appearance Section */}
-          <h3
-            className='full-span'
-            style={{
-              fontSize: '0.9rem',
-              color: 'var(--text-dim)',
-              marginTop: '1rem',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-            }}>
-            Appearance
-          </h3>
+    io.emit('update_post', updatedPost);
 
-          <div
-            className='full-span'
-            style={{
-              background: 'var(--input-bg)',
-              padding: '1rem',
-              borderRadius: '12px',
-              border: '1px solid var(--glass-border)',
-            }}>
-            {/* Font Size Control */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  marginBottom: '0.8rem',
-                }}>
-                <Type size={16} color='var(--primary)' />
-                <p style={{ fontSize: '0.9rem', fontWeight: 600 }}>Font Size</p>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '0.5rem',
-                  background: 'var(--bg-surface)',
-                  padding: '0.3rem',
-                  borderRadius: '8px',
-                  border: '1px solid var(--glass-border)',
-                }}>
-                <button
-                  onClick={() => changeFontSize(0.85)}
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    borderRadius: '6px',
-                    background:
-                      fontSize === 0.85 ? 'var(--primary)' : 'transparent',
-                    color: fontSize === 0.85 ? 'white' : 'var(--text-muted)',
-                    fontSize: '0.8rem',
-                  }}>
-                  Small
-                </button>
-                <button
-                  onClick={() => changeFontSize(1)}
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    borderRadius: '6px',
-                    background:
-                      fontSize === 1 ? 'var(--primary)' : 'transparent',
-                    color: fontSize === 1 ? 'white' : 'var(--text-muted)',
-                    fontSize: '0.9rem',
-                  }}>
-                  Normal
-                </button>
-                <button
-                  onClick={() => changeFontSize(1.15)}
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    borderRadius: '6px',
-                    background:
-                      fontSize === 1.15 ? 'var(--primary)' : 'transparent',
-                    color: fontSize === 1.15 ? 'white' : 'var(--text-muted)',
-                    fontSize: '1rem',
-                  }}>
-                  Large
-                </button>
-              </div>
-            </div>
+    // Notify Author on Like (only if just liked and NOT self-like)
+    if (
+      reactionType === 'like' &&
+      updatedPost.hasLiked &&
+      !post.userId.equals(userId)
+    ) {
+      await createNotification(
+        post.userId,
+        'like',
+        post._id,
+        { name: 'Someone', color: '#888' },
+        'liked your post',
+      );
+    }
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginBottom: '0.8rem',
-              }}>
-              <Moon size={16} color='var(--primary)' />
-              <p style={{ fontSize: '0.9rem', fontWeight: 600 }}>Dark Themes</p>
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-                gap: '0.8rem',
-                marginBottom: '1.5rem',
-              }}>
-              {DARK_THEMES.map((t) => (
-                <ThemeCard
-                  key={t.id}
-                  name={t.name}
-                  value={t.id}
-                  colors={t.colors}
-                  current={theme}
-                  onClick={changeTheme}
-                />
-              ))}
-            </div>
+    return res.status(200).json(updatedPost);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Reaction failed' });
+  }
+});
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginBottom: '0.8rem',
-              }}>
-              <Sun size={16} color='var(--primary)' />
-              <p style={{ fontSize: '0.9rem', fontWeight: 600 }}>
-                Light Themes
-              </p>
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-                gap: '0.8rem',
-              }}>
-              {LIGHT_THEMES.map((t) => (
-                <ThemeCard
-                  key={t.id}
-                  name={t.name}
-                  value={t.id}
-                  colors={t.colors}
-                  current={theme}
-                  onClick={changeTheme}
-                />
-              ))}
-            </div>
-          </div>
+app.post('/api/posts/:postId/comment', requireAuth, async (req, res) => {
+  const { postId } = req.params;
+  const { content, parentCommentId } = req.body;
+  const userId = req.user._id;
 
-          <div
-            className='full-span'
-            style={{
-              background: 'var(--input-bg)',
-              padding: '1rem',
-              borderRadius: '12px',
-              border: '1px solid var(--glass-border)',
-            }}>
-            <p
-              style={{
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                marginBottom: '0.8rem',
-              }}>
-              Typography
-            </p>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-                gap: '0.8rem',
-              }}>
-              {FONTS.map((f) => (
-                <FontCard
-                  key={f.id}
-                  name={f.name}
-                  value={f.id}
-                  current={font}
-                  onClick={changeFont}
-                />
-              ))}
-            </div>
-          </div>
+  if (!content || !content.trim())
+    return res.status(400).json({ error: 'Empty comment' });
+  const cleanedContent = safeClean(content.trim());
 
-          {/* Accessibility & Preferences */}
-          <h3
-            className='full-span'
-            style={{
-              fontSize: '0.9rem',
-              color: 'var(--text-dim)',
-              marginTop: '1rem',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-            }}>
-            Preferences
-          </h3>
+  try {
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
 
-          <SettingsItem
-            icon={Bell}
-            title='Notifications'
-            subtitle='Alerts for replies'
-            isActive={notifications}
-            onClick={() => setNotifications(!notifications)}
-          />
+    // Alias Logic
+    let aliasToUse;
+    if (post.userId.equals(userId)) {
+      aliasToUse = post.alias;
+    } else {
+      const existingComment = post.comments.find((c) =>
+        c.userId.equals(userId),
+      );
+      // Also check nested replies for alias consistency
+      const existingReply = post.comments
+        .flatMap((c) => c.replies)
+        .find((r) => r.userId.equals(userId));
 
-          <SettingsItem
-            icon={Volume2}
-            title='Sound Effects'
-            subtitle='UI interaction sounds'
-            isActive={soundEnabled}
-            onClick={toggleSound}
-          />
+      if (existingComment) aliasToUse = existingComment.alias;
+      else if (existingReply) aliasToUse = existingReply.alias;
+      else aliasToUse = generateUsername();
+    }
 
-          <SettingsItem
-            icon={Eye}
-            title='Reduce Motion'
-            subtitle='Minimize animations'
-            isActive={reduceMotion}
-            onClick={() => setReduceMotion(!reduceMotion)}
-          />
+    let updatedPost;
 
-          {/* Info Section */}
-          <h3
-            className='full-span'
-            style={{
-              fontSize: '0.9rem',
-              color: 'var(--text-dim)',
-              marginTop: '1rem',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-            }}>
-            Information
-          </h3>
+    if (parentCommentId) {
+      // Reply to comment
+      updatedPost = await Post.findOneAndUpdate(
+        { _id: postId, 'comments._id': parentCommentId },
+        {
+          $push: {
+            'comments.$.replies': {
+              content: cleanedContent,
+              userId: userId,
+              alias: aliasToUse,
+              createdAt: new Date(),
+            },
+          },
+        },
+        { new: true },
+      );
 
-          <SettingsItem
-            icon={BookOpen}
-            title='Community Rules'
-            subtitle='Guidelines'
-            isToggle={false}
-            showChevron={true}
-            onClick={() => navigate('/rules')}
-          />
-          <SettingsItem
-            icon={Info}
-            title='About AnonSpace'
-            subtitle='Project info'
-            isToggle={false}
-            showChevron={true}
-            onClick={() => navigate('/about')}
-          />
+      // Notify original commenter if NOT self-reply
+      const parentComment = post.comments.id(parentCommentId);
+      if (parentComment && !parentComment.userId.equals(userId)) {
+        await createNotification(
+          parentComment.userId,
+          'reply',
+          postId,
+          aliasToUse,
+          'replied to your comment',
+        );
+      }
+    } else {
+      // Top level comment
+      const newComment = {
+        _id: new mongoose.Types.ObjectId(),
+        content: cleanedContent,
+        userId: userId,
+        alias: aliasToUse,
+        replies: [],
+      };
+      updatedPost = await Post.findByIdAndUpdate(
+        postId,
+        { $push: { comments: { $each: [newComment], $position: 0 } } },
+        { new: true },
+      );
 
-          <SettingsItem
-            className='full-span'
-            icon={LogOut}
-            title='Log Out'
-            subtitle='Removes ID from device'
-            isToggle={false}
-            onClick={handleLogout}
-          />
+      // Notify Post Author if NOT self-comment
+      if (!post.userId.equals(userId)) {
+        await createNotification(
+          post.userId,
+          'comment',
+          postId,
+          aliasToUse,
+          'commented on your post',
+        );
+      }
+    }
 
-          {/* Danger Zone */}
-          <h3
-            className='full-span'
-            style={{
-              fontSize: '0.9rem',
-              color: 'var(--accent-red)',
-              marginTop: '1rem',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-            }}>
-            Danger Zone
-          </h3>
+    io.emit('update_post', updatedPost);
+    res.status(201).json(updatedPost);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to comment' });
+  }
+});
 
-          <SettingsItem
-            className='full-span'
-            icon={Trash2}
-            title='Delete Account'
-            subtitle='Permanently erase all data'
-            isToggle={false}
-            onClick={handleDeleteAccount}
-            style={{
-              borderColor: 'var(--accent-red)',
-              color: 'var(--accent-red)',
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-};
+app.post('/api/report', requireAuth, async (req, res) => {
+  const { targetType, targetId, reason } = req.body;
+  try {
+    const report = new Report({
+      targetType,
+      targetId,
+      reason,
+      reportedBy: req.user._id,
+    });
+    await report.save();
+    res.status(201).json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Report failed' });
+  }
+});
 
-export default Settings;
+app.get('/api/tags/trending', async (req, res) => {
+  try {
+    const trendingTags = await Post.aggregate([
+      { $unwind: '$tags' },
+      { $group: { _id: '$tags', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 6 },
+      { $project: { _id: 0, tag: '$_id' } },
+    ]);
+    let tags = trendingTags.map((t) => t.tag);
+    res.json(tags);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// --- Chat Endpoints ---
+
+app.get('/api/chat/status', requireAuth, async (req, res) => {
+  const user = req.user;
+  if (user.currentChatId) {
+    const chat = await Chat.findById(user.currentChatId);
+    if (chat && chat.isActive) {
+      // Updated limit to 10
+      const messages = await Message.find({ chatId: chat._id })
+        .sort({ createdAt: -1 })
+        .limit(10);
+
+      return res.json({
+        status: 'active',
+        chatId: chat._id,
+        messages: messages.reverse(),
+        expiresAt: chat.expiresAt,
+      });
+    } else {
+      user.currentChatId = null;
+      user.lookingForChat = false;
+      await user.save();
+    }
+  }
+  res.json({ status: user.lookingForChat ? 'scanning' : 'idle' });
+});
+
+app.post('/api/chat/opt-in', requireAuth, async (req, res) => {
+  const user = req.user;
+  if (user.currentChatId)
+    return res.status(400).json({ error: 'Already in chat' });
+
+  user.lookingForChat = true;
+  await user.save();
+
+  const partner = await User.findOne({
+    _id: { $ne: user._id },
+    lookingForChat: true,
+    currentChatId: null,
+    isBanned: false,
+    isTimedOut: false,
+  });
+
+  if (partner) {
+    const chat = new Chat({
+      participants: [user._id, partner._id],
+      expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+    });
+    await chat.save();
+
+    user.currentChatId = chat._id;
+    user.lookingForChat = false;
+    partner.currentChatId = chat._id;
+    partner.lookingForChat = false;
+
+    await user.save();
+    await partner.save();
+
+    io.to(user._id.toString()).emit('chat_matched', {
+      chatId: chat._id,
+      expiresAt: chat.expiresAt,
+    });
+    io.to(partner._id.toString()).emit('chat_matched', {
+      chatId: chat._id,
+      expiresAt: chat.expiresAt,
+    });
+
+    return res.json({ status: 'active', chatId: chat._id });
+  }
+
+  res.json({ status: 'scanning' });
+});
+
+app.post('/api/chat/message', requireAuth, async (req, res) => {
+  const { content } = req.body;
+  if (!req.user.currentChatId)
+    return res.status(400).json({ error: 'No active chat' });
+
+  // Allow emojis, but filter bad words safely
+  const cleanedContent = safeClean(content);
+
+  const message = new Message({
+    chatId: req.user.currentChatId,
+    senderId: req.user._id,
+    content: cleanedContent,
+  });
+  await message.save();
+
+  const chat = await Chat.findById(req.user.currentChatId);
+  if (chat) {
+    chat.participants.forEach((pId) => {
+      io.to(pId.toString()).emit('receive_message', message);
+    });
+  }
+
+  res.json(message);
+});
+
+app.post('/api/chat/leave', requireAuth, async (req, res) => {
+  if (req.user.currentChatId) {
+    const chat = await Chat.findById(req.user.currentChatId);
+    if (chat) {
+      chat.isActive = false;
+      await chat.save();
+
+      chat.participants.forEach(async (pId) => {
+        const u = await User.findById(pId);
+        if (u) {
+          u.currentChatId = null;
+          u.lookingForChat = false;
+          await u.save();
+        }
+        io.to(pId.toString()).emit('chat_ended');
+      });
+    }
+  } else {
+    req.user.lookingForChat = false;
+    await req.user.save();
+  }
+  res.json({ success: true });
+});
+
+io.on('connection', (socket) => {
+  socket.on('join_user_room', (userId) => {
+    socket.join(userId);
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`AnonSpace server running on http://localhost:${PORT}`);
+});

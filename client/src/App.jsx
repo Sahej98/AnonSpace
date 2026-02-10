@@ -15,6 +15,7 @@ import Settings from './pages/Settings.jsx';
 import MyPosts from './pages/MyPosts.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import Rules from './pages/Rules.jsx';
+import Changelog from './pages/Changelog.jsx';
 import InfoPanel from './components/InfoPanel.jsx';
 import PostModal from './components/PostModal.jsx';
 import Onboarding from './components/Onboarding.jsx';
@@ -35,6 +36,7 @@ const FULL_WIDTH_ROUTES = [
   '/rules',
   '/admin',
   '/my-posts',
+  '/changelog',
 ];
 
 const AppLayout = () => {
@@ -81,6 +83,7 @@ const AppLayout = () => {
             <Route path='/about' element={<About />} />
             <Route path='/rules' element={<Rules />} />
             <Route path='/settings' element={<Settings />} />
+            <Route path='/changelog' element={<Changelog />} />
             {(isAdmin || isModerator) && (
               <Route path='/admin' element={<AdminDashboard />} />
             )}

@@ -90,23 +90,33 @@ const PostModal = ({ isOpen, onClose, onAddPost }) => {
         ? pollOptions.filter((o) => o.trim() !== '').map((text) => ({ text }))
         : [];
 
+    // Optimistic UI: Close immediately and assume success
+    // The background process will handle it. If it fails, we can toast error then (but mostly it works)
+    addToast('Whisper released to the void.', 'success');
+    onClose();
+
+    // Reset form immediately
+    const tempContent = content;
+    setContent('');
+    setSelectedCategory(null);
+    setCustomTag('');
+    setPollOptions(['', '']);
+    setPostType('text');
+
+    // Background submission
     const { success, error } = await onAddPost(
-      content,
+      tempContent,
       tags,
       postType,
       finalPollOptions,
     );
-    if (success) {
-      setContent('');
-      setSelectedCategory(null);
-      setCustomTag('');
-      setPollOptions(['', '']);
-      setPostType('text');
-      addToast('Posted anonymously!', 'success');
-      onClose();
-    } else {
-      addToast(error || 'Failed to post.', 'error');
+
+    if (!success) {
+      // If it actually failed, alert user. Ideally we would reopen modal with content,
+      // but simpler is just alerting.
+      addToast(error || 'Failed to post. Please try again.', 'error');
     }
+
     setIsSubmitting(false);
   };
 

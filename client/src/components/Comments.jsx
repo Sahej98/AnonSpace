@@ -17,18 +17,21 @@ const formatCommentTime = (dateString) => {
   });
 };
 
-const CommentItem = ({ comment, postId, postUserId, onReply }) => {
+const CommentItem = ({ comment, postId, postUserId, onReply, isSending }) => {
   const hasReplies = comment.replies && comment.replies.length > 0;
 
   return (
-    <div className='comment-item-container'>
+    <div
+      className='comment-item-container'
+      style={{ opacity: isSending ? 0.6 : 1 }}>
       <div className='comment-item'>
         <div style={{ flexShrink: 0 }}>
           <UserAvatar alias={comment.alias} size='sm' />
         </div>
         <div className='comment-bubble'>
           <div className='comment-header'>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span
                 className='commenter-name'
                 style={{ color: comment.alias?.color }}>
@@ -39,15 +42,17 @@ const CommentItem = ({ comment, postId, postUserId, onReply }) => {
               )}
             </div>
             <span className='comment-timestamp'>
-              {formatCommentTime(comment.createdAt)}
+              {isSending ? 'Sending...' : formatCommentTime(comment.createdAt)}
             </span>
           </div>
-          <p className='comment-content'>{comment.content}</p>
-          <button
-            className='comment-reply-button'
-            onClick={() => onReply(comment._id, comment.alias?.name)}>
-            Reply
-          </button>
+          <p className='comment-content formatted-content'>{comment.content}</p>
+          {!isSending && (
+            <button
+              className='comment-reply-button'
+              onClick={() => onReply(comment._id, comment.alias?.name)}>
+              Reply
+            </button>
+          )}
         </div>
       </div>
 
@@ -77,7 +82,9 @@ const CommentItem = ({ comment, postId, postUserId, onReply }) => {
                     {formatCommentTime(reply.createdAt)}
                   </span>
                 </div>
-                <p className='comment-content'>{reply.content}</p>
+                <p className='comment-content formatted-content'>
+                  {reply.content}
+                </p>
               </div>
             </div>
           ))}
@@ -88,6 +95,7 @@ const CommentItem = ({ comment, postId, postUserId, onReply }) => {
 };
 
 const Comments = ({ postId, initialComments, postUserId }) => {
+  const [comments, setComments] = useState(initialComments);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
@@ -102,28 +110,59 @@ const Comments = ({ postId, initialComments, postUserId }) => {
     e.preventDefault();
     if (!newComment.trim() || isSubmitting) return;
 
+    const contentToSubmit = newComment;
+    setNewComment(''); // Clear input immediately
+    setShowEmoji(false);
     setIsSubmitting(true);
-    const body = { content: newComment };
+
+    // Optimistic Update
+    const tempId = Date.now().toString();
+    const optimisticComment = {
+      _id: tempId,
+      content: contentToSubmit,
+      userId: 'me', // Placeholder
+      alias: { name: 'You', color: 'var(--text-muted)' },
+      createdAt: new Date().toISOString(),
+      isSending: true,
+    };
+
+    if (replyTo) {
+      // Optimistic Reply logic is complex without full tree recursion,
+      // skipping deep optimistic reply for simplicity, or just append to list as temp
+      // For now, only top level is fully optimistic for better UX safety
+    } else {
+      setComments((prev) => [optimisticComment, ...prev]);
+    }
+
+    const body = { content: contentToSubmit };
     if (replyTo) body.parentCommentId = replyTo.id;
 
-    const response = await apiFetch(`/api/posts/${postId}/comment`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
+    try {
+      const response = await apiFetch(`/api/posts/${postId}/comment`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
 
-    if (response.ok) {
-      setNewComment('');
-      setReplyTo(null);
-      setShowEmoji(false);
-    } else {
+      if (response.ok) {
+        const updatedPost = await response.json();
+        // Replace local comments with server source of truth
+        setComments(updatedPost.comments);
+        setReplyTo(null);
+      } else {
+        throw new Error();
+      }
+    } catch (e) {
       addToast('Failed to add comment', 'error');
+      // Revert optimistic update
+      setComments((prev) => prev.filter((c) => c._id !== tempId));
+      setNewComment(contentToSubmit); // Restore text
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const handleEmojiClick = (emoji) => {
     setNewComment((prev) => prev + emoji);
-    // Don't close to allow multiple emojis
   };
 
   const handleReply = (id, name) => {
@@ -198,7 +237,7 @@ const Comments = ({ postId, initialComments, postUserId }) => {
               style={{
                 position: 'absolute',
                 bottom: '100%',
-                right: isLowWidth ? '310px':'400px',
+                right: isLowWidth ? '310px' : '400px',
                 zIndex: 10,
                 marginBottom: '0.5rem',
               }}>
@@ -209,7 +248,7 @@ const Comments = ({ postId, initialComments, postUserId }) => {
       </form>
       <div className='comment-list'>
         <AnimatePresence>
-          {initialComments.map((comment) => (
+          {comments.map((comment) => (
             <motion.div
               key={comment._id}
               initial={{ opacity: 0, x: -10 }}
@@ -219,6 +258,7 @@ const Comments = ({ postId, initialComments, postUserId }) => {
                 postId={postId}
                 postUserId={postUserId}
                 onReply={handleReply}
+                isSending={comment.isSending}
               />
             </motion.div>
           ))}
